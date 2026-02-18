@@ -26,6 +26,11 @@ io.on("connection", (socket) => {
         socket.join(room_id);
         socket.emit("room_created",{ roomId: room_id });
     })
+
+    socket.on("edit_room", (data) => {
+        var room_name = data.room_name;
+        var map_id = data.map_id;
+    })
     
 })
 
