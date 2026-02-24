@@ -17,48 +17,59 @@ if (btnCredits) {
 }
 
 // ACTION PAGE 
-const selectionCard = document.getElementById("selection-card");
+const selectionCard = document.getElementById("selection-card-rooms"); //contenitore rettangolare che mostra stanze
+const selectionCardJoin = document.getElementById("selection-card-join"); //contenitore rettangolare per inserimento code
 const btnCreate = document.getElementById("btn-create");
+const buttonGroup = document.querySelector(".button-group");
 
 function renderRooms(rooms) {
     if (!selectionCard) return;
 
-    selectionCard.innerHTML = "";
+    selectionCard.innerHTML = "<h2> ROOMS </h2>";
 
     if (rooms.length === 0) {
-        selectionCard.innerHTML = "<p class='no-rooms'>Nessuna stanza disponibile</p>";
+        selectionCard.innerHTML += "<p class='no-rooms'>Nessuna stanza disponibile</p>";
         return;
     }
 
     rooms.forEach((room) => {
         const roomEl = document.createElement("div");
         roomEl.classList.add("room-item");
-        roomEl.innerHTML = `
-            <span>Stanza <strong>${room.id}</strong></span>
-            <button class="btn btn-secondary btn-join" data-id="${room.id}">JOIN</button>
-        `;
+        roomEl.innerHTML = `<span class="room-name">Stanza <strong>${room.id}</strong></span>`;
+        
+        roomEl.addEventListener("click", () => {
+            selectRoom(room.id);
+        });
+
         selectionCard.appendChild(roomEl);
     });
+}
 
-    // Aggiunge listener ai bottoni JOIN appena creati
-    document.querySelectorAll(".btn-join").forEach((btn) => {
-        btn.addEventListener("click", () => {
-            const roomId = btn.dataset.id;
-            socket.emit("join_room", roomId);
-        });
+function selectRoom(roomId) {
+    // Nascondi il bottone CREATE
+    buttonGroup.style.display = "none";
+
+    // Mostra la card di join
+    selectionCardJoin.innerHTML = `
+        <h2>JOIN</h2>
+        <label class="join-label">INSERT THE ROOM CODE</label>
+        <input type="text" class="join-input" id="room-code-input" />
+        <button class="btn btn-primary" id="btn-join">JOIN</button>
+    `;
+
+    document.getElementById("btn-join").addEventListener("click", () => {
+        const code = document.getElementById("room-code-input").value.trim();
+        if (code) socket.emit("join_room", code);
     });
 }
 
 if (selectionCard) {
-    // Richiedi la lista stanze al caricamento della pagina
     socket.emit("get_rooms");
 
-    // Quando il server manda la lista aggiornata
     socket.on("rooms_list", (rooms) => {
         renderRooms(rooms);
     });
 
-    // Quando qualcosa cambia (nuova stanza, qualcuno entra/esce)
     socket.on("rooms_updated", () => {
         socket.emit("get_rooms");
     });
@@ -69,12 +80,3 @@ if (btnCreate) {
         socket.emit("create_room");
     });
 }
-
-socket.on("room_created", (data) => {
-    console.log("Stanza creata con ID:", data.roomId);
-});
-
-socket.on("room_joined", (data) => {
-    console.log("Entrato nella stanza:", data.roomId);
-    window.location.href = "/view/prova.html";
-});
