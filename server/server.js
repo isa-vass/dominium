@@ -7,6 +7,8 @@ const app = express();
 const httpServer = createServer(app);
 const io = new Server(httpServer, {});
 
+var rooms = new Map();
+
 app.use(express.static(path.join(__dirname, "../client")));
 
 app.get("/", (req, res) => {
@@ -17,7 +19,7 @@ const MAX_ROOMS = 3;
 
 function generateRoomId() {
     for (let i = 1; i <= MAX_ROOMS; i++) {
-        if (!io.of("/").adapter.rooms.has(String(i))) {
+        if (!rooms.has(String(i))) {
             return String(i);
         }
     }
@@ -26,7 +28,7 @@ function generateRoomId() {
 
 function getRooms() {
     const rooms = [];
-    io.of("/").adapter.rooms.forEach((sockets, roomId) => {
+    rooms.forEach((sockets, roomId) => {
         if (!io.of("/").sockets.has(roomId)) {
             rooms.push({ id: roomId, players: sockets.size });
         }
