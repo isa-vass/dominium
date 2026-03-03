@@ -186,8 +186,19 @@ body::before {
     min-height: 500px;
 }
 
-#selection-card {
+#selection-card-rooms {
     color: white;
+}
+
+#selection-card-join {
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    color: white;
+}
+
+#btn-join {
+    width: 100%;
 }
 
 .selection-card h2 {
@@ -195,7 +206,6 @@ body::before {
     font-size: 2.2em;
     margin-bottom: 35px;
     text-align: center;
-    border-bottom: 3px solid #8b0000;
     padding-bottom: 20px;
     text-transform: uppercase;
     letter-spacing: 3px;
@@ -229,4 +239,46 @@ body::before {
     .selection-card h2 {
         font-size: 1.8em;
     }
+}
+
+.room-item {
+    cursor: pointer;
+    padding: 12px 15px;
+    border: 1px solid #8b0000;
+    border-radius: 6px;
+    margin-bottom: 10px;
+    transition: all 0.3s ease;
+    color: #ffffff;
+}
+
+.room-item:hover {
+    background: rgba(139, 0, 0, 0.3);
+    border-color: #ff4444;
+}
+
+.join-label {
+    display: block;
+    color: #ffcccc;
+    font-size: 0.9em;
+    letter-spacing: 1px;
+    margin-bottom: 12px;
+    text-transform: uppercase;
+}
+
+.join-input {
+    width: 100%;
+    padding: 12px;
+    background: #0d0d0d;
+    border: 2px solid #8b0000;
+    border-radius: 6px;
+    color: white;
+    font-family: 'Cinzel', serif;
+    font-size: 1em;
+    margin-bottom: 20px;
+    outline: none;
+    transition: border-color 0.3s;
+}
+
+.join-input:focus {
+    border-color: #ff4444;
 }
