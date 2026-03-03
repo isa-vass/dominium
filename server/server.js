@@ -9,6 +9,18 @@ const io = new Server(httpServer, {});
 
 var rooms = new Map();
 
+/*
+
+rooms = {
+    "RoomID", {
+        room_code: "Codice univoco per entrare nella stanza",
+        map_id: "ID della mappa",
+        players: ["Player1", "Player2", ...]
+     }
+}
+
+*/
+
 app.use(express.static(path.join(__dirname, "../client")));
 
 app.get("/", (req, res) => {
@@ -26,14 +38,19 @@ function generateRoomId() {
     return null;
 }
 
+function generateRoomCode()  {
+    var roomCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+    return roomCode;
+}
+
 function getRooms() {
-    const rooms = [];
+    const roomList = [];
     rooms.forEach((sockets, roomId) => {
         if (!io.of("/").sockets.has(roomId)) {
-            rooms.push({ id: roomId, players: sockets.size });
+            roomList.push({ id: roomId, players: sockets.size });
         }
     });
-    return rooms;
+    return roomList;
 }
 
 io.on("connection", (socket) => {
@@ -45,6 +62,8 @@ io.on("connection", (socket) => {
 
     socket.on("create_room", () => {
         const room_id = generateRoomId();
+        const room_code = generateRoomCode();
+        //da aggiungere funzione per la selezione mappa
 
         if (room_id === null) {
             socket.emit("error", { message: "Numero massimo di stanze raggiunto" });
@@ -52,18 +71,32 @@ io.on("connection", (socket) => {
         }
 
         socket.join(room_id);
-        socket.emit("room_created", { roomId: room_id });
+        socket.emit("room_created", { roomId: room_id, roomCode: room_code });
         io.emit("rooms_updated");
+
+        // aggiungi la stanza alla mappa room
+        rooms.set(room_id, {
+            room_code: room_code,
+            map_id: null,
+            players: [socket.id]
+        });
     });
 
-    socket.on("join_room", (roomId) => {
+    socket.on("join_room", (roomId, roomCode) => {
         if (!io.of("/").adapter.rooms.has(roomId)) {
             socket.emit("error", { message: "Stanza non trovata" });
             return;
         }
-        socket.join(roomId);
-        socket.emit("room_joined", { roomId });
-        io.emit("rooms_updated");
+        if(rooms.get(roomId).room_code === roomCode) {
+            socket.join(roomId);
+            socket.emit("room_joined", { roomId });
+            rooms.get(roomId).players.push(socket.id)
+            io.emit("rooms_updated");
+            
+        }
+        else {
+            socket.emit("error", { message: "Codice stanza errato" });
+        }
     });
 
     socket.on("edit_room", (data) => {
@@ -72,6 +105,14 @@ io.on("connection", (socket) => {
     });
 
     socket.on("disconnect", () => {
+        rooms.forEach((room, roomId) => {
+            if (room.players.includes(socket.id)) {
+                room.players = room.players.filter(p => p !== socket.id); //Gestisci questione terre
+                if (room.players.length === 0) {
+                    rooms.delete(roomId);
+                }
+            }
+        });
         setTimeout(() => {
             io.emit("rooms_updated");
         }, 100);
