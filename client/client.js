@@ -17,8 +17,8 @@ if (btnCredits) {
 }
 
 // ACTION PAGE 
-const selectionCard = document.getElementById("selection-card-rooms"); //contenitore rettangolare che mostra stanze
-const selectionCardJoin = document.getElementById("selection-card-join"); //contenitore rettangolare per inserimento code
+const selectionCard = document.getElementById("selection-card-rooms");
+const selectionCardJoin = document.getElementById("selection-card-join");
 const btnCreate = document.getElementById("btn-create");
 const buttonGroup = document.querySelector(".button-group");
 
@@ -36,7 +36,7 @@ function renderRooms(rooms) {
         const roomEl = document.createElement("div");
         roomEl.classList.add("room-item");
         roomEl.innerHTML = `<span class="room-name">Stanza <strong>${room.id}</strong></span>`;
-        
+
         roomEl.addEventListener("click", () => {
             selectRoom(room.id);
         });
@@ -46,10 +46,8 @@ function renderRooms(rooms) {
 }
 
 function selectRoom(roomId) {
-    // Nascondi il bottone CREATE
     buttonGroup.style.display = "none";
 
-    // Mostra la card di join
     selectionCardJoin.innerHTML = `
         <h2>JOIN</h2>
         <label class="join-label">INSERT THE ROOM CODE</label>
@@ -58,8 +56,8 @@ function selectRoom(roomId) {
     `;
 
     document.getElementById("btn-join").addEventListener("click", () => {
-        const code = document.getElementById("room-code-input").value.trim();
-        if (code) socket.emit("join_room", code);
+        const roomCode = document.getElementById("room-code-input").value.trim();
+        if (roomCode) socket.emit("join_room", roomId, roomCode);
     });
 }
 
@@ -80,3 +78,16 @@ if (btnCreate) {
         socket.emit("create_room");
     });
 }
+
+socket.on("room_created", ({ roomId, roomCode }) => {
+    //da gestire risposta di creazione stanza, 
+    //capire se creare room.html o fare pagina dinamica
+});
+
+socket.on("room_joined", ({ roomId }) => {
+    // da gestire risposta di join stanza
+});
+
+socket.on("error", ({ message }) => {
+    //errore quando la persona non riesce ad entrare nella stanza
+});

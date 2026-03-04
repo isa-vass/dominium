@@ -7,7 +7,7 @@ const app = express();
 const httpServer = createServer(app);
 const io = new Server(httpServer, {});
 
-var rooms = new Map();
+const rooms = new Map();
 
 /*
 
@@ -39,16 +39,17 @@ function generateRoomId() {
 }
 
 function generateRoomCode()  {
-    var roomCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+    const roomCode = Math.random().toString(36).substring(2, 8).toUpperCase();
     return roomCode;
 }
 
 function getRooms() {
     const roomList = [];
-    rooms.forEach((sockets, roomId) => {
-        if (!io.of("/").sockets.has(roomId)) {
-            roomList.push({ id: roomId, players: sockets.size });
-        }
+    rooms.forEach((room, roomId) => {
+        roomList.push({
+            id: roomId, 
+            players: room.players.length 
+        });
     });
     return roomList;
 }
@@ -61,22 +62,22 @@ io.on("connection", (socket) => {
     });
 
     socket.on("create_room", () => {
-        const room_id = generateRoomId();
-        const room_code = generateRoomCode();
+        const roomId = generateRoomId();
+        const roomCode = generateRoomCode();
         //da aggiungere funzione per la selezione mappa
 
-        if (room_id === null) {
+        if (roomId === null) {
             socket.emit("error", { message: "Numero massimo di stanze raggiunto" });
             return;
         }
 
-        socket.join(room_id);
-        socket.emit("room_created", { roomId: room_id, roomCode: room_code });
+        socket.join(roomId);
+        socket.emit("room_created", { roomId: roomId, roomCode: roomCode });
         io.emit("rooms_updated");
 
         // aggiungi la stanza alla mappa room
-        rooms.set(room_id, {
-            room_code: room_code,
+        rooms.set(roomId, {
+            room_code: roomCode,
             map_id: null,
             players: [socket.id]
         });
@@ -87,7 +88,12 @@ io.on("connection", (socket) => {
             socket.emit("error", { message: "Stanza non trovata" });
             return;
         }
-        if(rooms.get(roomId).room_code === roomCode) {
+        else if(rooms.get(roomId).room_code === roomCode) {
+            if (rooms.get(roomId).players.length >= 4) {
+                socket.emit("error", { message: "Stanza piena" });
+                return;
+            }
+
             socket.join(roomId);
             socket.emit("room_joined", { roomId });
             rooms.get(roomId).players.push(socket.id)
@@ -99,9 +105,10 @@ io.on("connection", (socket) => {
         }
     });
 
-    socket.on("edit_room", (data) => {
-        const { room_name, map_id } = data;
-        console.log(`Stanza modificata: nome=${room_name}, mappa=${map_id}`);
+    socket.on("edit_room_name", (roomName, roomId) => {
+        const room = rooms.get(roomId);
+        room.room_name = roomName;
+        io.emit("rooms_updated");
     });
 
     socket.on("disconnect", () => {
