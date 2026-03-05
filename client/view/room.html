@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dominium – Stanza</title>
+    <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+<div class="game-container wide">
+
+    <div class="header">
+        <h1>DOMINIUM</h1>
+        <div class="room-info">
+            <div class="room-badge">STANZA <span id="display-room-id">—</span></div>
+            <div class="room-badge" id="code-badge" hidden>CODICE <span id="display-room-code">—</span></div>
+        </div>
+    </div>
+
+    <div class="room-layout">
+
+        <!-- SINISTRA: GIOCATORI -->
+        <div class="selection-card compact">
+            <h2 class="small">Giocatori</h2>
+            <div class="player-list" id="player-list">
+                <div class="player-slot-empty">In attesa...</div>
+                <div class="player-slot-empty">Slot libero</div>
+                <div class="player-slot-empty">Slot libero</div>
+                <div class="player-slot-empty">Slot libero</div>
+            </div>
+        </div>
+
+        <!-- CENTRO: MAPPA + COUNTDOWN + CONTINENTI -->
+        <div class="map-area">
+
+            <div class="selection-card compact">
+                <div class="map-placeholder">
+                    <svg viewBox="0 0 100 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <rect x="5" y="5" width="90" height="50" rx="4" stroke="#ff4444" stroke-width="2"/>
+                        <path d="M20 15 Q35 10 50 20 Q65 30 80 15" stroke="#ff4444" stroke-width="1.5" fill="none"/>
+                        <path d="M10 35 Q30 25 50 35 Q70 45 90 30" stroke="#ff4444" stroke-width="1.5" fill="none"/>
+                        <circle cx="50" cy="30" r="3" fill="#ff4444"/>
+                    </svg>
+                    <p>Mappa — Work in Progress</p>
+                </div>
+            </div>
+
+            <div class="countdown-bar" id="countdown-bar">
+                <div class="countdown-text">La partita inizia tra</div>
+                <div class="countdown-number" id="countdown-number">5</div>
+                <div class="countdown-track">
+                    <div class="countdown-fill" id="countdown-fill"></div>
+                </div>
+            </div>
+
+            <div class="selection-card compact">
+                <h2 class="small">Continenti</h2>
+                <div class="continent-grid">
+                    <button class="continent-btn" data-continent="agartha">Divine Empire<br>of Agartha</button>
+                    <button class="continent-btn" data-continent="garganta">Duchy of<br>Garganta</button>
+                    <button class="continent-btn" data-continent="fimia">Kingdom<br>of Fimia</button>
+                    <button class="continent-btn" data-continent="arstotzka">Union of<br>Arstotzka</button>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- DESTRA: AZIONI -->
+        <div class="right-panel">
+            <div class="selection-card compact">
+                <h2 class="small">Azioni</h2>
+                <div class="code-box" id="code-box" hidden>
+                    <div class="code-label">Codice stanza</div>
+                    <div class="code-value" id="display-room-code-2">——</div>
+                </div>
+                <div class="button-group vertical">
+                    <button class="btn btn-primary" id="btn-ready">PRONTO</button>
+                    <button class="btn btn-danger" id="btn-leave">✕ &nbsp;Lascia la stanza</button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+    const socket = io();
+
+    const params   = new URLSearchParams(window.location.search);
+    const roomId   = params.get("id") || sessionStorage.getItem("roomId");
+    const roomCode = sessionStorage.getItem("roomCode");
+    const isHost   = sessionStorage.getItem("isHost") === "true";
+
+    if (roomId) document.getElementById("display-room-id").textContent = roomId;
+
+    if (roomCode && isHost) {
+        document.getElementById("display-room-code").textContent = roomCode;
+        document.getElementById("code-badge").removeAttribute("hidden");
+        document.getElementById("display-room-code-2").textContent = roomCode;
+        document.getElementById("code-box").removeAttribute("hidden");
+    }
+
+    // Continenti
+    document.querySelectorAll(".continent-btn").forEach(btn => {
+        btn.addEventListener("click", () => {
+            document.querySelectorAll(".continent-btn").forEach(b => b.classList.remove("selected"));
+            btn.classList.add("selected");
+            socket.emit("select_continent", { roomId, continent: btn.dataset.continent });
+        });
+    });
+
+    // Pronto
+    let isReady = false;
+    const btnReady = document.getElementById("btn-ready");
+    btnReady.addEventListener("click", () => {
+        isReady = !isReady;
+        if (isReady) {
+            btnReady.textContent = "NON PRONTO";
+            btnReady.classList.replace("btn-primary", "btn-ready");
+        } else {
+            btnReady.textContent = "PRONTO";
+            btnReady.classList.replace("btn-ready", "btn-primary");
+        }
+        socket.emit("player_ready", { roomId, ready: isReady });
+    });
+
+    // Lascia stanza
+    document.getElementById("btn-leave").addEventListener("click", () => {
+        sessionStorage.clear();
+        window.location.href = "/view/action.html";
+    });
+
+    // Aggiorna giocatori
+    function renderPlayers(players) {
+        const list = document.getElementById("player-list");
+        list.innerHTML = "";
+        players.forEach(p => {
+            const el = document.createElement("div");
+            el.classList.add("player-item");
+            if (p.ready) el.classList.add("ready");
+            el.innerHTML = `
+                <span class="player-name">${p.id}</span>
+                <span class="player-status ${p.ready ? "status-ready" : "status-waiting"}">
+                    ${p.ready ? "Pronto" : "Attesa"}
+                </span>`;
+            list.appendChild(el);
+        });
+        for (let i = players.length; i < 4; i++) {
+            const slot = document.createElement("div");
+            slot.classList.add("player-slot-empty");
+            slot.textContent = "Slot libero";
+            list.appendChild(slot);
+        }
+    }
+
+    // Countdown
+    let countdownInterval = null;
+    function startCountdown(seconds) {
+        const bar    = document.getElementById("countdown-bar");
+        const number = document.getElementById("countdown-number");
+        const fill   = document.getElementById("countdown-fill");
+        bar.classList.add("visible");
+        let remaining = seconds;
+        number.textContent = remaining;
+        fill.style.width = "100%";
+        countdownInterval = setInterval(() => {
+            remaining--;
+            number.textContent = remaining;
+            fill.style.width = (remaining / seconds * 100) + "%";
+            if (remaining <= 0) clearInterval(countdownInterval);
+        }, 1000);
+    }
+
+    function stopCountdown() {
+        clearInterval(countdownInterval);
+        document.getElementById("countdown-bar").classList.remove("visible");
+    }
+
+    // Socket events
+    socket.on("players_updated", ({ players }) => renderPlayers(players));
+    socket.on("countdown_start", ({ seconds }) => startCountdown(seconds));
+    socket.on("countdown_stop", () => stopCountdown());
+    socket.on("game_start", () => {
+        window.location.href = `/view/game.html?id=${roomId}`;
+    });
+</script>
+</body>
+</html>

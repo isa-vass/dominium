@@ -80,8 +80,9 @@ if (btnCreate) {
 }
 
 socket.on("room_created", ({ roomId, roomCode }) => {
-    //da gestire risposta di creazione stanza, 
-    //capire se creare room.html o fare pagina dinamica
+    sessionStorage.setItem("roomId", roomId);
+    sessionStorage.setItem("roomCode", roomCode);
+    window.location.href = "/view/room.html";
 });
 
 socket.on("room_joined", ({ roomId }) => {

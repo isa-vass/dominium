@@ -72,7 +72,7 @@ io.on("connection", (socket) => {
         }
 
         socket.join(roomId);
-        socket.emit("room_created", { roomId: roomId, roomCode: roomCode });
+        socket.emit("room_created", { roomId: roomId, roomCode: roomCode, isHost: true });
         io.emit("rooms_updated");
 
         // aggiungi la stanza alla mappa room
@@ -80,6 +80,7 @@ io.on("connection", (socket) => {
             room_code: roomCode,
             map_id: null,
             players: [socket.id]
+            host : socket.id
         });
     });
 
@@ -112,13 +113,19 @@ io.on("connection", (socket) => {
     });
 
     socket.on("disconnect", () => {
-        rooms.forEach((room, roomId) => {
-            if (room.players.includes(socket.id)) {
-                room.players = room.players.filter(p => p !== socket.id); //Gestisci questione terre
-                if (room.players.length === 0) {
-                    rooms.delete(roomId);
-                }
+    rooms.forEach((room, roomId) => {
+        if (room.players.includes(socket.id)) {
+            room.players = room.players.filter(p => p !== socket.id);
+            if (room.players.length === 0) {
+                setTimeout(() => {
+                    if (rooms.has(roomId) && rooms.get(roomId).players.length === 0) {
+                        rooms.delete(roomId);
+                        io.emit("rooms_updated");
+                    }
+                }, 5000); // aspetta 5 secondi prima di cancellare
+                return;
             }
+        }
         });
         setTimeout(() => {
             io.emit("rooms_updated");
