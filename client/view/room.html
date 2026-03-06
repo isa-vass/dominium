@@ -86,6 +86,7 @@
 <script src="/socket.io/socket.io.js"></script>
 <script>
     const socket = io();
+    
 
     const params   = new URLSearchParams(window.location.search);
     const roomId   = params.get("id") || sessionStorage.getItem("roomId");
@@ -110,6 +111,11 @@
         });
     });
 
+    socket.on("connect", () => {
+        const roomId = sessionStorage.getItem("roomId");
+        if (roomId) socket.emit("rejoin_room");
+    });
+
     // Pronto
     let isReady = false;
     const btnReady = document.getElementById("btn-ready");
@@ -127,8 +133,10 @@
 
     // Lascia stanza
     document.getElementById("btn-leave").addEventListener("click", () => {
-        sessionStorage.clear();
-        window.location.href = "/view/action.html";
+        fetch("/leave-room", { method: "POST" }).finally(() => {
+            sessionStorage.clear();
+            window.location.href = "/view/action.html";
+        });
     });
 
     // Aggiorna giocatori

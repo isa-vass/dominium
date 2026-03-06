@@ -58,6 +58,7 @@ function selectRoom(roomId) {
     document.getElementById("btn-join").addEventListener("click", () => {
         const roomCode = document.getElementById("room-code-input").value.trim();
         if (roomCode) socket.emit("join_room", roomId, roomCode);
+        window.location.href = "/view/room.html?id=" + roomId;
     });
 }
 
@@ -79,16 +80,24 @@ if (btnCreate) {
     });
 }
 
-socket.on("room_created", ({ roomId, roomCode }) => {
+socket.on("room_created", ({ roomId, roomCode, isHost }) => {
     sessionStorage.setItem("roomId", roomId);
     sessionStorage.setItem("roomCode", roomCode);
-    window.location.href = "/view/room.html";
+    sessionStorage.setItem("isHost", isHost);
+    window.location.href = `/view/room.html?id=${roomId}`;
 });
 
-socket.on("room_joined", ({ roomId }) => {
-    // da gestire risposta di join stanza
+socket.on("room_joined", ({ roomId, isHost }) => {
+    sessionStorage.setItem("roomId", roomId);
+    sessionStorage.setItem("isHost", isHost);
+    window.location.href = `/view/room.html?id=${roomId}`;
 });
 
 socket.on("error", ({ message }) => {
     //errore quando la persona non riesce ad entrare nella stanza
+});
+
+socket.on("connect", () => {
+    const roomId = sessionStorage.getItem("roomId");
+    if (roomId) socket.emit("rejoin_room");
 });

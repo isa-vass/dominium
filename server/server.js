@@ -2,29 +2,48 @@ const express = require("express");
 const { createServer } = require("http");
 const { Server } = require("socket.io");
 const path = require("path");
+const session = require("express-session");
+const cookieParser = require("cookie-parser");
 
 const app = express();
 const httpServer = createServer(app);
 const io = new Server(httpServer, {});
 
 const rooms = new Map();
+const deleteTimers = new Map();
 
 /*
-
 rooms = {
     "RoomID", {
         room_code: "Codice univoco per entrare nella stanza",
         map_id: "ID della mappa",
-        players: ["Player1", "Player2", ...]
-     }
+        host: "socket.id del creatore",
+        players: ["socket.id1", "socket.id2", ...]
+    }
 }
-
 */
+
+const sessionMiddleware = session({
+    secret: "dominium-secret",
+    resave: false,
+    saveUninitialized: true,
+    cookie: { secure: false }
+});
+
+app.use(cookieParser());
+app.use(sessionMiddleware);
+io.engine.use(sessionMiddleware);
 
 app.use(express.static(path.join(__dirname, "../client")));
 
 app.get("/", (req, res) => {
     res.sendFile(path.join(__dirname, "../client/view/home.html"));
+});
+
+app.post("/leave-room", (req, res) => {
+    req.session.roomId = null;
+    req.session.save();
+    res.sendStatus(200);
 });
 
 const MAX_ROOMS = 3;
@@ -38,17 +57,16 @@ function generateRoomId() {
     return null;
 }
 
-function generateRoomCode()  {
-    const roomCode = Math.random().toString(36).substring(2, 8).toUpperCase();
-    return roomCode;
+function generateRoomCode() {
+    return Math.random().toString(36).substring(2, 8).toUpperCase();
 }
 
 function getRooms() {
     const roomList = [];
     rooms.forEach((room, roomId) => {
         roomList.push({
-            id: roomId, 
-            players: room.players.length 
+            id: roomId,
+            players: room.players.length
         });
     });
     return roomList;
@@ -63,69 +81,101 @@ io.on("connection", (socket) => {
 
     socket.on("create_room", () => {
         const roomId = generateRoomId();
-        const roomCode = generateRoomCode();
-        //da aggiungere funzione per la selezione mappa
 
         if (roomId === null) {
             socket.emit("error", { message: "Numero massimo di stanze raggiunto" });
             return;
         }
 
-        socket.join(roomId);
-        socket.emit("room_created", { roomId: roomId, roomCode: roomCode, isHost: true });
-        io.emit("rooms_updated");
+        const roomCode = generateRoomCode();
 
-        // aggiungi la stanza alla mappa room
         rooms.set(roomId, {
             room_code: roomCode,
             map_id: null,
+            host: socket.id,
             players: [socket.id]
-            host : socket.id
         });
+
+        socket.join(roomId);
+        socket.request.session.roomId = roomId;
+        socket.request.session.save();
+
+        socket.emit("room_created", { roomId, roomCode, isHost: true });
+        io.emit("rooms_updated");
     });
 
     socket.on("join_room", (roomId, roomCode) => {
-        if (!io.of("/").adapter.rooms.has(roomId)) {
+        const room = rooms.get(roomId);
+
+        if (!room) {
             socket.emit("error", { message: "Stanza non trovata" });
             return;
         }
-        else if(rooms.get(roomId).room_code === roomCode) {
-            if (rooms.get(roomId).players.length >= 4) {
-                socket.emit("error", { message: "Stanza piena" });
-                return;
-            }
 
-            socket.join(roomId);
-            socket.emit("room_joined", { roomId });
-            rooms.get(roomId).players.push(socket.id)
-            io.emit("rooms_updated");
-            
-        }
-        else {
+        if (room.room_code !== roomCode) {
             socket.emit("error", { message: "Codice stanza errato" });
+            return;
         }
+
+        if (room.players.length >= 4) {
+            socket.emit("error", { message: "Stanza piena" });
+            return;
+        }
+
+        room.players.push(socket.id);
+        socket.join(roomId);
+        socket.request.session.roomId = roomId;
+        socket.request.session.save();
+
+        socket.emit("room_joined", { roomId, isHost: false });
+        io.emit("rooms_updated");
+    });
+
+    socket.on("rejoin_room", () => {
+        console.log("rejoin_room chiamato da:", socket.id);
+        const roomId = socket.request.session.roomId;
+        console.log("rejoin chiamato, roomId:", roomId, "socket:", socket.id);
+        if (!roomId) return;
+
+        const room = rooms.get(roomId);
+        if (!room) return;
+
+        if (deleteTimers.has(roomId)) {
+            clearTimeout(deleteTimers.get(roomId));
+            deleteTimers.delete(roomId);
+        }
+
+        if (!room.players.includes(socket.id)) {
+            room.players.push(socket.id);
+        }
+
+        socket.join(roomId);
+        io.emit("rooms_updated");
     });
 
     socket.on("edit_room_name", (roomName, roomId) => {
         const room = rooms.get(roomId);
+        if (!room) return;
         room.room_name = roomName;
         io.emit("rooms_updated");
     });
 
     socket.on("disconnect", () => {
-    rooms.forEach((room, roomId) => {
-        if (room.players.includes(socket.id)) {
-            room.players = room.players.filter(p => p !== socket.id);
-            if (room.players.length === 0) {
-                setTimeout(() => {
-                    if (rooms.has(roomId) && rooms.get(roomId).players.length === 0) {
-                        rooms.delete(roomId);
-                        io.emit("rooms_updated");
-                    }
-                }, 5000); // aspetta 5 secondi prima di cancellare
-                return;
+        console.log("disconnect:", socket.id);
+        rooms.forEach((room, roomId) => {
+            console.log("players in room", roomId, ":", room.players);
+            if (room.players.includes(socket.id)) {
+                room.players = room.players.filter(p => p !== socket.id);
+                if (room.players.length === 0) {
+                    const timer = setTimeout(() => {
+                        if (rooms.has(roomId) && rooms.get(roomId).players.length === 0) {
+                            rooms.delete(roomId);
+                            io.emit("rooms_updated");
+                        }
+                    }, 5000);
+                    deleteTimers.set(roomId, timer);
+                }
             }
-        }
         });
         setTimeout(() => {
             io.emit("rooms_updated");
