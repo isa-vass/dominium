@@ -127,6 +127,10 @@ io.on("connection", (socket) => {
         socket.request.session.roomId = roomId;
         socket.request.session.save();
 
+        // Log per vedere chi entra nella stanza
+        console.log(`[JOIN] Socket ${socket.id} è entrato nella stanza ${roomId}`);
+        console.log(`[ROOM ${roomId}] Giocatori ora presenti:`, room.players);
+
         socket.emit("room_joined", { roomId, isHost: false });
         io.emit("rooms_updated");
     });
@@ -163,9 +167,27 @@ io.on("connection", (socket) => {
     socket.on("disconnect", () => {
         console.log("disconnect:", socket.id);
         rooms.forEach((room, roomId) => {
-            console.log("players in room", roomId, ":", room.players);
-            if (room.players.includes(socket.id)) {
-                room.players = room.players.filter(p => p !== socket.id);
+            if (!room.players.includes(socket.id)) return;
+
+            const isHost = room.host === socket.id;
+
+            room.players = room.players.filter(p => p !== socket.id);
+
+            if (isHost) {
+                // ✅ Aspetta prima di kickare: potrebbe essere un redirect/refresh
+                const timer = setTimeout(() => {
+                    const currentRoom = rooms.get(roomId);
+                    // Se la stanza esiste ancora e l'host NON è tornato → kick reale
+                    if (currentRoom && currentRoom.host === socket.id) {
+                        console.log(`[HOST LEFT] L'host ${socket.id} ha lasciato la stanza ${roomId}. Kick di tutti i giocatori.`);
+                        io.to(roomId).emit("host_left");
+                        rooms.delete(roomId);
+                        io.emit("rooms_updated");
+                    }
+                }, 3000); // 3 secondi di grazia per il rejoin
+                deleteTimers.set(`host_${roomId}`, timer);
+
+            } else {
                 if (room.players.length === 0) {
                     const timer = setTimeout(() => {
                         if (rooms.has(roomId) && rooms.get(roomId).players.length === 0) {
@@ -177,6 +199,7 @@ io.on("connection", (socket) => {
                 }
             }
         });
+
         setTimeout(() => {
             io.emit("rooms_updated");
         }, 100);
