@@ -98,10 +98,12 @@ io.on("connection", (socket) => {
 
         socket.join(roomId);
         socket.request.session.roomId = roomId;
-        socket.request.session.save();
-
-        socket.emit("room_created", { roomId, roomCode, isHost: true });
-        io.emit("rooms_updated");
+        socket.request.session.isHost = true;
+        socket.request.session.save((err) => {
+            if (err) console.error("[CREATE] Errore salvataggio sessione:", err);
+            socket.emit("room_created", { roomId, roomCode, isHost: true });
+            io.emit("rooms_updated");
+        });
     });
 
     socket.on("join_room", (roomId, roomCode) => {
@@ -125,28 +127,41 @@ io.on("connection", (socket) => {
         room.players.push(socket.id);
         socket.join(roomId);
         socket.request.session.roomId = roomId;
-        socket.request.session.save();
+        socket.request.session.isHost = false;
 
-        // Log per vedere chi entra nella stanza
-        console.log(`[JOIN] Socket ${socket.id} è entrato nella stanza ${roomId}`);
-        console.log(`[ROOM ${roomId}] Giocatori ora presenti:`, room.players);
-
-        socket.emit("room_joined", { roomId, isHost: false });
-        io.emit("rooms_updated");
+        // Aspetta che la sessione sia salvata PRIMA di notificare il client
+        socket.request.session.save((err) => {
+            if (err) console.error("[JOIN] Errore salvataggio sessione:", err);
+            console.log(`[JOIN] Sessione salvata per ${socket.id}, roomId=${roomId}`);
+            socket.emit("room_joined", { roomId, isHost: false });
+            io.emit("rooms_updated");
+        });
     });
 
-    socket.on("rejoin_room", () => {
-        console.log("rejoin_room chiamato da:", socket.id);
-        const roomId = socket.request.session.roomId;
-        console.log("rejoin chiamato, roomId:", roomId, "socket:", socket.id);
-        if (!roomId) return;
+
+    socket.on("rejoin_room", ({ roomId, isHost } = {}) => {
+        console.log(`[REJOIN] socket=${socket.id}, roomId=${roomId}, isHost=${isHost}`);
+
+        if (!roomId) {
+            console.log(`[REJOIN] Nessun roomId, skip`);
+            return;
+        }
 
         const room = rooms.get(roomId);
-        if (!room) return;
+        if (!room) {
+            console.log(`[REJOIN] Room ${roomId} non trovata`);
+            return;
+        }
 
-        if (deleteTimers.has(roomId)) {
-            clearTimeout(deleteTimers.get(roomId));
-            deleteTimers.delete(roomId);
+        for (const key of [`host_${roomId}`, roomId]) {
+            if (deleteTimers.has(key)) {
+                clearTimeout(deleteTimers.get(key));
+                deleteTimers.delete(key);
+            }
+        }
+
+        if (isHost) {
+            room.host = socket.id;
         }
 
         if (!room.players.includes(socket.id)) {
@@ -154,6 +169,10 @@ io.on("connection", (socket) => {
         }
 
         socket.join(roomId);
+        console.log(`[REJOIN] ${socket.id} joinato alla room ${roomId}`);
+        console.log(`[REJOIN] Sockets ora nella room:`, io.sockets.adapter.rooms.get(roomId));
+
+        socket.emit("rejoined", { roomId, isHost: room.host === socket.id });
         io.emit("rooms_updated");
     });
 
@@ -164,8 +183,27 @@ io.on("connection", (socket) => {
         io.emit("rooms_updated");
     });
 
+    socket.on("leave_room", ({ roomId }) => {
+        const room = rooms.get(roomId);
+        if (!room) return;
+
+        const isHost = room.host === socket.id;
+        room.players = room.players.filter(p => p !== socket.id);
+
+        if (isHost) {
+            io.to(roomId).emit("host_left");
+            rooms.delete(roomId);
+            io.emit("rooms_updated");
+        } else {
+            io.emit("rooms_updated");
+        }
+
+        socket.request.session.roomId = null;
+        socket.request.session.isHost = false;
+        socket.request.session.save();
+    });
+
     socket.on("disconnect", () => {
-        console.log("disconnect:", socket.id);
         rooms.forEach((room, roomId) => {
             if (!room.players.includes(socket.id)) return;
 
@@ -174,19 +212,19 @@ io.on("connection", (socket) => {
             room.players = room.players.filter(p => p !== socket.id);
 
             if (isHost) {
-                // ✅ Aspetta prima di kickare: potrebbe essere un redirect/refresh
+                const oldSocketId = socket.id;
                 const timer = setTimeout(() => {
                     const currentRoom = rooms.get(roomId);
-                    // Se la stanza esiste ancora e l'host NON è tornato → kick reale
-                    if (currentRoom && currentRoom.host === socket.id) {
-                        console.log(`[HOST LEFT] L'host ${socket.id} ha lasciato la stanza ${roomId}. Kick di tutti i giocatori.`);
+                    // La stanza esiste ed host NON è tornato (host sarebbe stato aggiornato dal rejoin)
+                    if (currentRoom && currentRoom.host === oldSocketId) {
+                        console.log(`[HOST LEFT] Kick di tutti nella room ${roomId}`);
+                        console.log(`[HOST LEFT] Sockets nella room:`, io.sockets.adapter.rooms.get(roomId));
                         io.to(roomId).emit("host_left");
                         rooms.delete(roomId);
                         io.emit("rooms_updated");
                     }
-                }, 3000); // 3 secondi di grazia per il rejoin
+                }, 3000);
                 deleteTimers.set(`host_${roomId}`, timer);
-
             } else {
                 if (room.players.length === 0) {
                     const timer = setTimeout(() => {
