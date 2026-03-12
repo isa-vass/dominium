@@ -97,10 +97,124 @@
             color: #d4d8e8;
             font-weight: 600;
         }
+
+        /* ── PLAYER PANEL ── */
+
+        @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Cinzel+Decorative:wght@700&display=swap');
+
+        #player-panel {
+            position: fixed;
+            top: 24px;
+            left: 24px;
+            z-index: 500;
+            width: 220px;
+            background: linear-gradient(145deg, #1a1a1a 0%, #0d0d0d 100%);
+            border: 2px solid #8b0000;
+            border-radius: 12px;
+            padding: 18px 20px 20px;
+            box-shadow:
+                0 20px 60px rgba(0, 0, 0, 0.8),
+                inset 0 1px 0 rgba(255, 68, 68, 0.15),
+                0 0 24px rgba(139, 0, 0, 0.25);
+            font-family: 'Cinzel', 'Georgia', serif;
+            animation: fadeInPanel 0.6s ease-in;
+        }
+
+        @keyframes fadeInPanel {
+            from { opacity: 0; transform: translateY(-12px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+
+        #player-panel::before {
+            content: '⚔';
+            position: absolute;
+            top: -12px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 1.1em;
+            color: #8b0000;
+            background: #0d0d0d;
+            padding: 0 8px;
+            line-height: 1;
+        }
+
+        .pp-title {
+            text-align: center;
+            font-family: 'Cinzel Decorative', 'Georgia', serif;
+            font-size: 0.6em;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            color: rgba(255, 68, 68, 0.6);
+            margin-bottom: 14px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid rgba(139, 0, 0, 0.35);
+        }
+
+        .pp-row {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+            margin-bottom: 12px;
+        }
+
+        .pp-row:last-child {
+            margin-bottom: 0;
+        }
+
+        .pp-label {
+            font-size: 0.6em;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: rgba(255, 204, 204, 0.4);
+        }
+
+        .pp-value {
+            font-size: 0.88em;
+            letter-spacing: 1px;
+            color: #ffcccc;
+            font-weight: 600;
+            min-height: 1.2em;
+        }
+
+        .pp-value.accent {
+            color: #ff4444;
+            text-shadow: 0 0 8px rgba(255, 0, 0, 0.3);
+        }
+
+        .pp-divider {
+            height: 1px;
+            background: rgba(139, 0, 0, 0.25);
+            margin: 10px 0;
+        }
     </style>
 </head>
 
 <body>
+
+    <!-- ── PLAYER INFO PANEL ── -->
+    <div id="player-panel">
+        <div class="pp-title">Player</div>
+
+        <div class="pp-row">
+            <span class="pp-label">Nome</span>
+            <span class="pp-value accent" id="pp-name"><!-- playerName --></span>
+        </div>
+
+        <div class="pp-divider"></div>
+
+        <div class="pp-row">
+            <span class="pp-label">Continente</span>
+            <span class="pp-value" id="pp-continent"><!-- playerContinent --></span>
+        </div>
+
+        <div class="pp-divider"></div>
+
+        <div class="pp-row">
+            <span class="pp-label">Truppe</span>
+            <span class="pp-value" id="pp-troops"><!-- playerTroops --></span>
+        </div>
+    </div>
+
     <div class="map-wrapper">
     <svg viewBox="0 0 2000 1000" xmlns="http://www.w3.org/2000/svg">
         <defs>
@@ -191,33 +305,44 @@
     <div id="tooltip"></div>
 
     <script>
+        // ── PLAYER DATA VARIABLES ──
+        const playerName      = '';       // nome del giocatore
+        const playerContinent = '';       // continente del giocatore
+        const playerTroops    = 0;        // truppe del giocatore
+
+        // Populate panel
+        document.getElementById('pp-name').textContent      = playerName;
+        document.getElementById('pp-continent').textContent = playerContinent;
+        document.getElementById('pp-troops').textContent    = playerTroops;
+
+        // ── MAP DATA ──
         const ownerName = '';
         const ownerTroups = 0;
 
         const provinces = {
-            'province-1': { name: 'Haygram', continent: 'Kingdom of Fimia', owner: ownerName, troups: ownerTroups},
-            'province-2': { name: "Baka", continent: 'Kingdom of Fimia', owner: ownerName, troups: ownerTroups},
-            'province-3': { name: 'Albuquerque', continent: 'Kingdom of Fimia', owner: ownerName, troups: ownerTroups},
-            'province-4': { name: 'Magnus', continent: 'Kingdom of Fimia', owner: ownerName, troups: ownerTroups},
-            'province-5': { name: "BakuDeku" , continent: 'Union of Arstotzka', owner: ownerName, troups: ownerTroups},
-            'province-6': { name: 'Tankyou', continent: 'Union of Arstotzka', owner: ownerName, troups: ownerTroups},
-            'province-7': { name: 'Pontedera', continent: 'Union of Arstotzka', owner: ownerName, troups: ownerTroups},
-            'province-8': { name: 'Poggibonsi', continent: 'Union of Arstotzka', owner: ownerName, troups: ownerTroups},
-            'province-9': { name: 'Youranus', continent: 'Duchy of Garganta', owner: ownerName, troups: ownerTroups},
-            'province-10': { name: 'Kenia', continent: 'Duchy of Garganta', owner: ownerName, troups: ownerTroups},
-            'province-11': { name: 'Epstein', continent: 'Duchy of Garganta', owner: ownerName, troups: ownerTroups},
-            'province-12': { name: 'Calabria', continent: 'Duchy of Garganta', owner: ownerName, troups: ownerTroups},
-            'province-13': { name: 'Susshy', continent: 'Divine Empire of Agartha', owner: ownerName, troups: ownerTroups},
-            'province-14': { name: 'Lezzoh', continent: 'Divine Empire of Agartha', owner: ownerName, troups: ownerTroups},
-            'province-15': { name: 'Sodapop', continent: 'Divine Empire of Agartha', owner: ownerName, troups: ownerTroups},
-            'province-16': { name: 'Shapeofyou', continent: 'Divine Empire of Agartha', owner: ownerName, troups: ownerTroups}
+            'province-1':  { name: 'Haygram',     continent: 'Kingdom of Fimia',        owner: ownerName, troups: ownerTroups },
+            'province-2':  { name: 'Baka',         continent: 'Kingdom of Fimia',        owner: ownerName, troups: ownerTroups },
+            'province-3':  { name: 'Albuquerque',  continent: 'Kingdom of Fimia',        owner: ownerName, troups: ownerTroups },
+            'province-4':  { name: 'Magnus',       continent: 'Kingdom of Fimia',        owner: ownerName, troups: ownerTroups },
+            'province-5':  { name: 'BakuDeku',     continent: 'Union of Arstotzka',      owner: ownerName, troups: ownerTroups },
+            'province-6':  { name: 'Tankyou',      continent: 'Union of Arstotzka',      owner: ownerName, troups: ownerTroups },
+            'province-7':  { name: 'Pontedera',    continent: 'Union of Arstotzka',      owner: ownerName, troups: ownerTroups },
+            'province-8':  { name: 'Poggibonsi',   continent: 'Union of Arstotzka',      owner: ownerName, troups: ownerTroups },
+            'province-9':  { name: 'Youranus',     continent: 'Duchy of Garganta',       owner: ownerName, troups: ownerTroups },
+            'province-10': { name: 'Kenia',        continent: 'Duchy of Garganta',       owner: ownerName, troups: ownerTroups },
+            'province-11': { name: 'Epstein',      continent: 'Duchy of Garganta',       owner: ownerName, troups: ownerTroups },
+            'province-12': { name: 'Calabria',     continent: 'Duchy of Garganta',       owner: ownerName, troups: ownerTroups },
+            'province-13': { name: 'Susshy',       continent: 'Divine Empire of Agartha', owner: ownerName, troups: ownerTroups },
+            'province-14': { name: 'Lezzoh',       continent: 'Divine Empire of Agartha', owner: ownerName, troups: ownerTroups },
+            'province-15': { name: 'Sodapop',      continent: 'Divine Empire of Agartha', owner: ownerName, troups: ownerTroups },
+            'province-16': { name: 'Shapeofyou',   continent: 'Divine Empire of Agartha', owner: ownerName, troups: ownerTroups }
         };
 
-       const continentColors = {
+        const continentColors = {
             'Divine Empire of Agartha': '#a7c957',
-            'Duchy of Garganta': '#cbeef3',
-            'Kingdom of Fimia': '#ef233c',
-            'Union of Arstotzka': '#ffb3c6'
+            'Duchy of Garganta':        '#cbeef3',
+            'Kingdom of Fimia':         '#ef233c',
+            'Union of Arstotzka':       '#ffb3c6'
         };
 
         const tooltip = document.getElementById('tooltip');
@@ -230,21 +355,20 @@
                 const d = provinces[id];
                 const col = continentColors[d.continent] || '#fff';
                 tooltip.innerHTML = `
-                <div class="t-name">${d.name}</div>
-                <div class="t-state" style="color:${col}">${d.continent}</div>
-                <div class="t-row"><span class="t-label">Owner</span><span class="t-val">${d.owner.toLocaleString('it-IT')}</span></div>
-                <div class="t-row"><span class="t-label">Troups</span><span class="t-val">${d.troups}</span></div>
-            `;
+                    <div class="t-name">${d.name}</div>
+                    <div class="t-state" style="color:${col}">${d.continent}</div>
+                    <div class="t-row"><span class="t-label">Owner</span><span class="t-val">${d.owner.toLocaleString('it-IT')}</span></div>
+                    <div class="t-row"><span class="t-label">Troups</span><span class="t-val">${d.troups}</span></div>
+                `;
                 tooltip.style.display = 'block';
             });
 
             el.addEventListener('mousemove', e => {
                 tooltip.style.left = (e.clientX + 18) + 'px';
-                tooltip.style.top = (e.clientY + 18) + 'px';
-                // keep tooltip on screen
+                tooltip.style.top  = (e.clientY + 18) + 'px';
                 const r = tooltip.getBoundingClientRect();
-                if (r.right > window.innerWidth) tooltip.style.left = (e.clientX - r.width - 10) + 'px';
-                if (r.bottom > window.innerHeight) tooltip.style.top = (e.clientY - r.height - 10) + 'px';
+                if (r.right  > window.innerWidth)  tooltip.style.left = (e.clientX - r.width  - 10) + 'px';
+                if (r.bottom > window.innerHeight) tooltip.style.top  = (e.clientY - r.height - 10) + 'px';
             });
 
             el.addEventListener('mouseleave', () => {
