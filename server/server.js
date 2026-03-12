@@ -12,17 +12,6 @@ const io = new Server(httpServer, {});
 const rooms = new Map();
 const deleteTimers = new Map();
 
-/*
-rooms = {
-    "RoomID", {
-        room_code: "Codice univoco per entrare nella stanza",
-        map_id: "ID della mappa",
-        host: "socket.id del creatore",
-        players: ["socket.id1", "socket.id2", ...]
-    }
-}
-*/
-
 const sessionMiddleware = session({
     secret: "dominium-secret",
     resave: false,
@@ -72,8 +61,41 @@ function getRooms() {
     return roomList;
 }
 
+// Costruisce la lista giocatori con nomi da mandare al client
+async function getPlayersWithNames(room) {
+    const players = [];
+    for (const socketId of room.players) {
+        const connectedSocket = io.sockets.sockets.get(socketId);
+        const name = connectedSocket?.request?.session?.userName || socketId;
+        players.push({
+            id: socketId,
+            name,
+            ready: room.readyPlayers?.has(socketId) || false,
+            isHost: room.host === socketId
+        });
+    }
+    return players;
+}
+
+async function emitPlayersUpdated(roomId) {
+    const room = rooms.get(roomId);
+    if (!room) return;
+    const players = await getPlayersWithNames(room);
+    io.to(roomId).emit("players_updated", { players });
+}
+
 io.on("connection", (socket) => {
     socket.emit("welcome", "Welcome to Dominium!");
+
+    socket.on("set_name", (name) => {
+        if (!name || typeof name !== "string") return;
+        socket.request.session.userName = name.trim().substring(0, 20);
+        socket.request.session.save(() => {
+            // Aggiorna la lista giocatori nella stanza se è già dentro
+            const roomId = socket.request.session.roomId;
+            if (roomId) emitPlayersUpdated(roomId);
+        });
+    });
 
     socket.on("get_rooms", () => {
         socket.emit("rooms_list", getRooms());
@@ -93,7 +115,8 @@ io.on("connection", (socket) => {
             room_code: roomCode,
             map_id: null,
             host: socket.id,
-            players: [socket.id]
+            players: [socket.id],
+            readyPlayers: new Set()
         });
 
         socket.join(roomId);
@@ -103,6 +126,7 @@ io.on("connection", (socket) => {
             if (err) console.error("[CREATE] Errore salvataggio sessione:", err);
             socket.emit("room_created", { roomId, roomCode, isHost: true });
             io.emit("rooms_updated");
+            emitPlayersUpdated(roomId);
         });
     });
 
@@ -129,29 +153,19 @@ io.on("connection", (socket) => {
         socket.request.session.roomId = roomId;
         socket.request.session.isHost = false;
 
-        // Aspetta che la sessione sia salvata PRIMA di notificare il client
         socket.request.session.save((err) => {
             if (err) console.error("[JOIN] Errore salvataggio sessione:", err);
-            console.log(`[JOIN] Sessione salvata per ${socket.id}, roomId=${roomId}`);
             socket.emit("room_joined", { roomId, isHost: false });
             io.emit("rooms_updated");
+            emitPlayersUpdated(roomId);
         });
     });
 
-
     socket.on("rejoin_room", ({ roomId, isHost } = {}) => {
-        console.log(`[REJOIN] socket=${socket.id}, roomId=${roomId}, isHost=${isHost}`);
-
-        if (!roomId) {
-            console.log(`[REJOIN] Nessun roomId, skip`);
-            return;
-        }
+        if (!roomId) return;
 
         const room = rooms.get(roomId);
-        if (!room) {
-            console.log(`[REJOIN] Room ${roomId} non trovata`);
-            return;
-        }
+        if (!room) return;
 
         for (const key of [`host_${roomId}`, roomId]) {
             if (deleteTimers.has(key)) {
@@ -160,20 +174,33 @@ io.on("connection", (socket) => {
             }
         }
 
-        if (isHost) {
-            room.host = socket.id;
-        }
+        if (isHost) room.host = socket.id;
 
         if (!room.players.includes(socket.id)) {
             room.players.push(socket.id);
         }
 
-        socket.join(roomId);
-        console.log(`[REJOIN] ${socket.id} joinato alla room ${roomId}`);
-        console.log(`[REJOIN] Sockets ora nella room:`, io.sockets.adapter.rooms.get(roomId));
+        if (!room.readyPlayers) room.readyPlayers = new Set();
 
+        socket.join(roomId);
         socket.emit("rejoined", { roomId, isHost: room.host === socket.id });
         io.emit("rooms_updated");
+        emitPlayersUpdated(roomId);
+    });
+
+    socket.on("player_ready", ({ roomId, ready }) => {
+        const room = rooms.get(roomId);
+        if (!room) return;
+
+        if (!room.readyPlayers) room.readyPlayers = new Set();
+
+        if (ready) {
+            room.readyPlayers.add(socket.id);
+        } else {
+            room.readyPlayers.delete(socket.id);
+        }
+
+        emitPlayersUpdated(roomId);
     });
 
     socket.on("edit_room_name", (roomName, roomId) => {
@@ -189,12 +216,14 @@ io.on("connection", (socket) => {
 
         const isHost = room.host === socket.id;
         room.players = room.players.filter(p => p !== socket.id);
+        room.readyPlayers?.delete(socket.id);
 
         if (isHost) {
             io.to(roomId).emit("host_left");
             rooms.delete(roomId);
             io.emit("rooms_updated");
         } else {
+            emitPlayersUpdated(roomId);
             io.emit("rooms_updated");
         }
 
@@ -208,17 +237,14 @@ io.on("connection", (socket) => {
             if (!room.players.includes(socket.id)) return;
 
             const isHost = room.host === socket.id;
-
             room.players = room.players.filter(p => p !== socket.id);
+            room.readyPlayers?.delete(socket.id);
 
             if (isHost) {
                 const oldSocketId = socket.id;
                 const timer = setTimeout(() => {
                     const currentRoom = rooms.get(roomId);
-                    // La stanza esiste ed host NON è tornato (host sarebbe stato aggiornato dal rejoin)
                     if (currentRoom && currentRoom.host === oldSocketId) {
-                        console.log(`[HOST LEFT] Kick di tutti nella room ${roomId}`);
-                        console.log(`[HOST LEFT] Sockets nella room:`, io.sockets.adapter.rooms.get(roomId));
                         io.to(roomId).emit("host_left");
                         rooms.delete(roomId);
                         io.emit("rooms_updated");
@@ -226,6 +252,7 @@ io.on("connection", (socket) => {
                 }, 3000);
                 deleteTimers.set(`host_${roomId}`, timer);
             } else {
+                emitPlayersUpdated(roomId);
                 if (room.players.length === 0) {
                     const timer = setTimeout(() => {
                         if (rooms.has(roomId) && rooms.get(roomId).players.length === 0) {
