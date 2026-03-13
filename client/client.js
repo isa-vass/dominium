@@ -77,7 +77,7 @@ socket.on("room_joined", ({ roomId, isHost }) => {
 });
 
 socket.on("error", ({ message }) => {
-    //errore quando la persona non riesce ad entrare nella stanza
+    alert(message);
 });
 
 socket.on("connect", () => {
@@ -95,10 +95,10 @@ function selectRoom(roomId) {
         <input type="text" class="join-input" id="room-code-input" />
         <button class="btn btn-primary" id="btn-join">JOIN</button>
     `;
+    
 
     document.getElementById("btn-join").addEventListener("click", () => {
         const roomCode = document.getElementById("room-code-input").value.trim();
         if (roomCode) socket.emit("join_room", roomId, roomCode);
-        window.location.href = "/view/room.html?id=" + roomId;
     });
 }
