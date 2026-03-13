@@ -138,7 +138,7 @@ io.on("connection", (socket) => {
             return;
         }
 
-        if (room.room_code !== roomCode) {
+        if (room.room_code !== roomCode.toUpperCase()) {
             socket.emit("error", { message: "Codice stanza errato" });
             return;
         }

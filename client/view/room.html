@@ -110,21 +110,7 @@
 
         // Rejoin immediato prima del nome
         socket.on("connect", () => {
-<<<<<<< HEAD
-            const roomId = params.get("id") || sessionStorage.getItem("roomId");
-            const isHost = sessionStorage.getItem("isHost") === "true";
-
-            if (sessionStorage.getItem("roomJoined")) {
-                // Sto tornando indietro con le frecce → verifica se la stanza esiste ancora
-                socket.emit("check_room", { roomId });
-            } else {
-                // Prima volta che entro → rejoin normale
-                if (roomId) socket.emit("rejoin_room", { roomId, isHost });
-                sessionStorage.setItem("roomJoined", "true");
-            }
-=======
             if (roomId) socket.emit("rejoin_room", { roomId, isHost });
->>>>>>> d18afdbc53ac782aecd9446d3178ad772b717ad7
         });
 
         const nameInput  = document.getElementById("name-input");
@@ -269,29 +255,6 @@
             clearInterval(countdownInterval);
             document.getElementById("countdown-bar").classList.remove("visible");
         }
-<<<<<<< HEAD
-
-        // Socket events
-        socket.on("players_updated", ({ players }) => renderPlayers(players));
-        socket.on("countdown_start", ({ seconds }) => startCountdown(seconds));
-        socket.on("countdown_stop", () => stopCountdown());
-        socket.on("game_start", () => {
-            window.location.href = `/view/game.html?id=${roomId}`;
-        });
-
-        // Host ha abbandonato → kick di tutti i giocatori rimasti
-        socket.on("host_left", () => {
-            sessionStorage.clear();
-            alert("L'host ha abbandonato la stanza.");
-            window.location.href = "/view/action.html";
-        });
-
-        socket.on("room_not_found", () => {
-            sessionStorage.clear();
-            window.location.replace("/view/action.html");
-        });
-=======
->>>>>>> d18afdbc53ac782aecd9446d3178ad772b717ad7
     </script>
 </body>
 
