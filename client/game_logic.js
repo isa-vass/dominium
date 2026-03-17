@@ -1,101 +1,168 @@
-// LOGICA PANEL INIZIALE PER ORDINE DEI TURNI
-        const roomId = sessionStorage.getItem("roomId"); // o come lo stai salvando
-        const overlay = document.getElementById("overlay");
-        const pageContent = document.getElementById("page-content");
-        const btnRoll = document.getElementById("btn-roll-dice");
-        const waitingMsg = document.getElementById("waiting-msg");
-        const diceResultDisplay = document.getElementById("dice-result-display");
-        const myRollValue = document.getElementById("my-roll-value");
-        const diceRollsList = document.getElementById("dice-rolls-list");
-        const modalTitle = document.getElementById("modal-title");
-        const modalDesc = document.getElementById("modal-desc");
+// ── LOGICA PANEL INIZIALE PER ORDINE DEI TURNI ──
+const overlay = document.getElementById("overlay");
+const pageContent = document.getElementById("page-content");
+const btnRoll = document.getElementById("btn-roll-dice");
+const waitingMsg = document.getElementById("waiting-msg");
+const diceResultDisplay = document.getElementById("dice-result-display");
+const myRollValue = document.getElementById("my-roll-value");
+const diceRollsList = document.getElementById("dice-rolls-list");
+const modalTitle = document.getElementById("modal-title");
+const modalDesc = document.getElementById("modal-desc");
 
-        function showModal() {
-            overlay.style.display = "flex";
-            pageContent.classList.add("blur");
-        }
+function showModal() {
+    overlay.style.display = "flex";
+    pageContent.classList.add("blur");
+}
 
-        function hideModal() {
-            overlay.style.display = "none";
-            pageContent.classList.remove("blur");
-        }
+function hideModal() {
+    overlay.style.display = "none";
+    pageContent.classList.remove("blur");
+}
 
-        // Mostra il modal all'avvio del gioco
-        showModal();
+// Mostra il modal all'avvio del gioco
+showModal();
 
-        // --- Tiro del dado ---
-        btnRoll.addEventListener("click", () => {
-            btnRoll.disabled = true;
-            btnRoll.textContent = "Dado tirato!";
-            socket.emit("roll_for_turn_order", { roomId });
-        });
+function getRoomId() {
+    const rid = sessionStorage.getItem("roomId")
+        || localStorage.getItem("roomId")
+        || new URLSearchParams(window.location.search).get("roomId")
+        || new URLSearchParams(window.location.search).get("id");
+    console.log("[getRoomId]", rid);
+    return rid;
+}
 
-        // Aggiorna la lista quando un giocatore tira
-        socket.on("player_rolled", ({ socketId, name, roll }) => {
-            // Aggiorna o aggiunge la riga nella lista
-            let row = document.getElementById(`roll-${socketId}`);
-            if (!row) {
-                row = document.createElement("div");
-                row.id = `roll-${socketId}`;
-                row.style.cssText = "padding:6px 0; color:#ffcccc; font-size:0.95em;";
-                diceRollsList.appendChild(row);
-            }
-            row.textContent = `${name}: 🎲 ${roll}`;
+btnRoll.addEventListener("click", () => {
+    const rId = getRoomId();
+    console.log("[btnRoll] roomId:", rId, "socket:", socket.id);
 
-            // Mostra il proprio risultato
-            if (socketId === socket.id) {
-                diceResultDisplay.style.display = "block";
-                myRollValue.textContent = roll;
-                waitingMsg.style.display = "block";
-            }
-        });
+    if (!rId) {
+        console.warn("[btnRoll] roomId mancante");
+        modalDesc.textContent = "Errore: manca roomId, torna in lobby.";
+        btnRoll.disabled = true;
+        return;
+    }
 
-        // Pareggio: solo i giocatori pareggiati ritirano
-        socket.on("turn_order_tie", ({ tiedPlayerIds, tiedNames }) => {
-            const isTied = tiedPlayerIds.includes(socket.id);
+    sessionStorage.setItem("roomId", rId);
 
-            modalTitle.textContent = "Pareggio!";
-            modalDesc.textContent = `Pareggio tra: ${tiedNames.join(", ")}. Devono ritirare il dado.`;
-            diceRollsList.innerHTML = "";
-            diceResultDisplay.style.display = "none";
-            waitingMsg.style.display = "none";
+    btnRoll.disabled = true;
+    btnRoll.textContent = "Dado tirato!";
+    socket.emit("roll_for_turn_order", { roomId: rId });
+});
 
-            if (isTied) {
-                btnRoll.disabled = false;
-                btnRoll.textContent = "Ritira il Dado";
-                btnRoll.style.display = "block";
-            } else {
-                btnRoll.style.display = "none";
-                waitingMsg.style.display = "block";
-                waitingMsg.textContent = "In attesa dell'esito del pareggio...";
-            }
-        });
+socket.on("error", ({ message }) => {
+    console.error("Errore socket:", message);
+    modalDesc.textContent = message;
+});
 
-        // Ordine finale deciso
-        socket.on("turn_order_decided", ({ turnOrder }) => {
-            modalTitle.textContent = "Ordine Turni Stabilito!";
-            modalDesc.textContent = "La partita sta per iniziare...";
-            diceRollsList.innerHTML = "";
-            btnRoll.style.display = "none";
-            waitingMsg.style.display = "none";
+// Aggiorna la lista quando un giocatore tira
+socket.on("player_rolled", ({ socketId, name, roll }) => {
+    let row = document.getElementById(`roll-${socketId}`);
+    if (!row) {
+        row = document.createElement("div");
+        row.id = `roll-${socketId}`;
+        row.classList.add("dice-roll-row");
+        diceRollsList.appendChild(row);
+    }
 
-            turnOrder.forEach((player, index) => {
-                const row = document.createElement("div");
-                row.style.cssText = "padding:5px 0; color:#ffcccc; font-size:0.95em;";
-                const medal = index === 0 ? "🥇" : index === 1 ? "🥈" : index === 2 ? "🥉" : `${index + 1}.`;
-                row.textContent = `${medal} ${player.name}`;
-                diceRollsList.appendChild(row);
-            });
+    const isMe = socketId === socket.id;
+    row.innerHTML = `
+        <span class="dice-roll-name">${name}${isMe ? " (tu)" : ""}</span>
+        <div class="dice-roll-badge">
+            <div class="dice-face">${roll}</div>
+        </div>
+    `;
 
-            // Chiudi il modal dopo 3 secondi e avvia il gioco
-            setTimeout(() => {
+    // Riordina la lista in ordine decrescente in tempo reale
+    const rows = Array.from(diceRollsList.querySelectorAll(".dice-roll-row"));
+    rows.sort((a, b) => {
+        const rollA = parseInt(a.querySelector(".dice-face")?.textContent || "0");
+        const rollB = parseInt(b.querySelector(".dice-face")?.textContent || "0");
+        return rollB - rollA;
+    });
+    diceRollsList.innerHTML = "";
+    rows.forEach(r => diceRollsList.appendChild(r));
+
+    if (isMe) {
+        diceResultDisplay.style.display = "block";
+        myRollValue.textContent = roll;
+        waitingMsg.style.display = "block";
+    }
+});
+
+// Pareggio
+socket.on("turn_order_tie", ({ tiedPlayerIds, tiedNames }) => {
+    const isTied = tiedPlayerIds.includes(socket.id);
+
+    modalTitle.textContent = "Pareggio!";
+    modalDesc.textContent = `Pareggio tra: ${tiedNames.join(", ")}. Devono ritirare il dado.`;
+    diceRollsList.innerHTML = "";
+    diceResultDisplay.style.display = "none";
+    waitingMsg.style.display = "none";
+
+    if (isTied) {
+        btnRoll.disabled = false;
+        btnRoll.textContent = "Ritira il Dado";
+        btnRoll.style.display = "block";
+    } else {
+        btnRoll.style.display = "none";
+        waitingMsg.style.display = "block";
+        waitingMsg.textContent = "In attesa dell'esito del pareggio...";
+    }
+});
+
+// Ordine finale deciso
+socket.on("turn_order_decided", ({ turnOrder }) => {
+    modalTitle.textContent = "Ordine Turni Stabilito!";
+    modalDesc.textContent = "La partita sta per iniziare...";
+    diceRollsList.innerHTML = "";
+    btnRoll.style.display = "none";
+    waitingMsg.style.display = "none";
+
+    turnOrder.forEach((player, index) => {
+        const row = document.createElement("div");
+        row.classList.add("dice-roll-row", "final");
+        const medals = ["🥇", "🥈", "🥉"];
+        const medal = medals[index] || `${index + 1}.`;
+        const isMe = player.socketId === socket.id;
+        row.innerHTML = `
+            <span class="dice-roll-name">${medal} ${player.name}${isMe ? " (tu)" : ""}</span>
+        `;
+        diceRollsList.appendChild(row);
+    });
+
+    let sec = 3;
+    const countdownEl = document.getElementById("modal-countdown");
+    const countdownNum = document.getElementById("modal-countdown-num");
+    const countdownFill = document.getElementById("modal-countdown-fill");
+
+    if (countdownEl) {
+        countdownEl.style.display = "flex";
+        countdownNum.textContent = sec;
+        countdownFill.style.width = "100%";
+
+        const iv = setInterval(() => {
+            sec--;
+            countdownNum.textContent = sec;
+            countdownFill.style.width = (sec / 3 * 100) + "%";
+            if (sec <= 0) {
+                clearInterval(iv);
                 hideModal();
-                startGame(turnOrder); // tua funzione per iniziare il gioco
-            }, 3000);
-        });
+                startGame(turnOrder);
+            }
+        }, 1000);
+    } else {
+        setTimeout(() => {
+            hideModal();
+            startGame(turnOrder);
+        }, 3000);
+    }
+});
 
-//FINE LOGICA PANEL INIZIALE PER ORDINE DEI TURNI
+function startGame(turnOrder) {
+    console.log("Gioco iniziato, ordine turni:", turnOrder);
+}
 
+// --- BATTLE LOGIC ---
 socket.on("show_action_box", () => {
     showModal();
 });
@@ -105,18 +172,13 @@ socket.on("hide_action_box", () => {
 });
 
 function attack(attackerTroops, defenderTroops) {
-    socket.emit("win_chance", {
-        attackerTroops,
-        defenderTroops
-    });
+    socket.emit("win_chance", { attackerTroops, defenderTroops });
 }
 
 socket.on("battle_result", ({ winner }) => {
     if (winner === "attacker") {
         console.log("L'attaccante ha vinto!");
-        // aggiorna UI
     } else {
         console.log("Il difensore ha resistito!");
-        // aggiorna UI
     }
 });

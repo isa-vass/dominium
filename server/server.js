@@ -83,6 +83,10 @@ async function emitPlayersUpdated(roomId) {
     io.to(roomId).emit("players_updated", { players });
 }
 
+function debugRooms(msg) {
+    console.log("[ROOMS DEBUG]", msg, "keys:", Array.from(rooms.keys()));
+}
+
 io.on("connection", (socket) => {
     socket.emit("welcome", "Welcome to Dominium!");
 
@@ -227,7 +231,7 @@ io.on("connection", (socket) => {
         emitPlayersUpdated(roomId);
 
         // Controlla se tutti i 4 giocatori sono pronti
-        if (room.players.length === 1 && room.readyPlayers.size === 1) {
+        if (room.players.length === 4 && room.readyPlayers.size === 4) {
             ///////////////////////4
             // Avvia countdown di 3 secondi
             io.to(roomId).emit("game_countdown_start", { seconds: 3 });
@@ -302,6 +306,7 @@ io.on("connection", (socket) => {
                 if (rooms.has(roomId) && rooms.get(roomId).players.length === 0) {
                     rooms.delete(roomId);
                     io.emit("rooms_updated");
+                    debugRooms(`rooms.delete(${roomId}) timeout`);
                 }
             }, 5000);
             deleteTimers.set(roomId, timer);
@@ -312,12 +317,13 @@ io.on("connection", (socket) => {
 
         socket.request.session.roomId = null;
         socket.request.session.save();
+
+        debugRooms(`after leave_room ${roomId}, socket ${socket.id}`);
     });
 
     socket.on("disconnect", () => {
         rooms.forEach((room, roomId) => {
             if (!room.players.includes(socket.id)) return;
-
             room.players = room.players.filter(p => p !== socket.id);
             room.readyPlayers?.delete(socket.id);
 
@@ -341,15 +347,15 @@ io.on("connection", (socket) => {
                     if (rooms.has(roomId) && rooms.get(roomId).players.length === 0) {
                         rooms.delete(roomId);
                         io.emit("rooms_updated");
+                        debugRooms(`rooms.delete(${roomId}) timeout on disconnect`);
                     }
                 }, 5000);
                 deleteTimers.set(roomId, timer);
             }
         });
 
-        setTimeout(() => {
-            io.emit("rooms_updated");
-        }, 100);
+        setTimeout(() => io.emit("rooms_updated"), 100);
+        debugRooms(`after disconnect ${socket.id}`);
     });
 
 // --- GAME LOGIC ---
@@ -359,25 +365,41 @@ io.on("connection", (socket) => {
         socket.emit("battle_result", { winner });
     });
 
-    socket.on("roll_for_turn_order", ({ roomId }) => {
-        const room = rooms.get(roomId);
-        if (!room) return;
+    socket.on("roll_for_turn_order", (payload = {}) => {
+        const roomId = String(payload.roomId || socket.request?.session?.roomId || "");
+        debugRooms(`[roll_for_turn_order start] socket:${socket.id} payloadRoom:${payload.roomId} sessionRoom:${socket.request?.session?.roomId}`);
+        console.log("[roll_for_turn_order] roomId:", roomId, "socketRooms:", Array.from(socket.rooms));
+
+        let room = rooms.get(roomId);
+        if (!room) {
+            const fallbackRoom = Array.from(socket.rooms).find(r => r !== socket.id);
+            if (fallbackRoom && rooms.has(fallbackRoom)) {
+                room = rooms.get(fallbackRoom);
+                console.log("[roll_for_turn_order] fallbackRoom:", fallbackRoom);
+            }
+        }
+
+        if (!room) {
+            console.error("[roll_for_turn_order] stanza non trovata", { roomId, socketRooms: Array.from(socket.rooms) });
+            socket.emit("error", { message: "Stanza non trovata" });
+            return;
+        }
+
+        const effectiveRoomId = roomId || Array.from(socket.rooms).find(r => r !== socket.id);
+        socket.request.session.roomId = effectiveRoomId;
+        socket.request.session.save(() => {});
 
         if (!room.turnOrderRolls) room.turnOrderRolls = {};
-
-        // Evita di tirare due volte
         if (room.turnOrderRolls[socket.id]) return;
 
         const roll = Math.floor(Math.random() * 6) + 1;
         room.turnOrderRolls[socket.id] = roll;
 
-        // Notifica a tutti il tiro di questo giocatore
         const playerName = io.sockets.sockets.get(socket.id)?.request?.session?.userName || socket.id;
-        io.to(roomId).emit("player_rolled", { socketId: socket.id, name: playerName, roll });
+        io.to(effectiveRoomId).emit("player_rolled", { socketId: socket.id, name: playerName, roll });
 
-        // Controlla se hanno tirato tutti
         const totalPlayers = room.players.length;
-        const totalRolled = Object.keys(room.turnOrderRolls).length;
+        const totalRolled = Object.keys(room.turnOrderRolls).length; //conta quantio giocatori hanno già tirato 
 
         if (totalRolled === totalPlayers) {
             // Ordina per dado decrescente, in caso di parità ri-tira
@@ -429,3 +451,25 @@ function resolveBattle(attackerTroops, defenderTroops) {
 httpServer.listen(3000, () => {
     console.log("Server in ascolto su http://localhost:3000");
 });
+
+function clearDeleteTimer(roomId) {
+    const t = deleteTimers.get(roomId);
+    if (t) {
+        clearTimeout(t);
+        deleteTimers.delete(roomId);
+        debugRooms(`clearDeleteTimer ${roomId}`);
+    }
+}
+
+function scheduleDeleteRoom(roomId) {
+    clearDeleteTimer(roomId);
+    const timer = setTimeout(() => {
+        const room = rooms.get(roomId);
+        if (!room || room.players.length > 0) return;
+        rooms.delete(roomId);
+        deleteTimers.delete(roomId);
+        io.emit("rooms_updated");
+        debugRooms(`rooms.delete(${roomId}) timeout`);
+    }, 5000); // o 10000
+    deleteTimers.set(roomId, timer);
+}

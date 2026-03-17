@@ -827,3 +827,223 @@ body::before {
     background: rgba(139, 0, 0, 0.25);
     margin: 10px 0;
 }
+
+/* ══════════════════════════════════════════
+   DICE MODAL  (aggiungere in fondo a style.css)
+   ══════════════════════════════════════════ */
+
+#overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.75);
+    display: none;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+
+#modal-box {
+    background: linear-gradient(145deg, #1a1a1a 0%, #0d0d0d 100%);
+    border: 3px solid #8b0000;
+    border-radius: 15px;
+    padding: 40px 44px 36px;
+    width: 100%;
+    max-width: 480px;
+    box-shadow:
+        0 20px 60px rgba(0, 0, 0, 0.85),
+        inset 0 1px 0 rgba(255, 68, 68, 0.15),
+        0 0 30px rgba(139, 0, 0, 0.3);
+    font-family: 'Cinzel', Georgia, serif;
+    position: relative;
+    color: #ffcccc;
+}
+
+/* spada decorativa in cima */
+.modal-sword {
+    position: absolute;
+    top: -14px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #0d0d0d;
+    padding: 0 10px;
+    color: #8b0000;
+    font-size: 1.2em;
+    line-height: 1;
+}
+
+/* titolo */
+.modal-title {
+    font-family: 'Cinzel Decorative', Georgia, serif;
+    color: #ff4444;
+    font-size: 1.4em;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    text-align: center;
+    margin-bottom: 8px;
+    text-shadow: 0 0 12px rgba(255, 0, 0, 0.4);
+}
+
+.modal-divider {
+    height: 1px;
+    background: rgba(139, 0, 0, 0.4);
+    margin: 14px 0 18px;
+}
+
+/* descrizione */
+.modal-desc {
+    color: rgba(255, 204, 204, 0.6);
+    font-size: 0.72em;
+    letter-spacing: 1.5px;
+    text-align: center;
+    margin-bottom: 24px;
+    text-transform: uppercase;
+    line-height: 1.7;
+}
+
+/* lista tiri dadi */
+.dice-rolls-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 20px;
+    min-height: 80px;
+}
+
+.dice-rolls-empty {
+    text-align: center;
+    color: rgba(255, 204, 204, 0.25);
+    font-size: 0.7em;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    padding: 18px 0;
+}
+
+.dice-roll-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    border: 1px solid rgba(139, 0, 0, 0.45);
+    border-radius: 8px;
+    background: rgba(139, 0, 0, 0.07);
+    transition: border-color 0.3s, background 0.3s;
+    animation: rowFadeIn 0.3s ease-out;
+}
+
+@keyframes rowFadeIn {
+    from { opacity: 0; transform: translateY(-6px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.dice-roll-row.final {
+    border-color: rgba(255, 68, 68, 0.3);
+    background: rgba(139, 0, 0, 0.1);
+}
+
+.dice-roll-name {
+    color: #ffcccc;
+    font-size: 0.78em;
+    letter-spacing: 1px;
+}
+
+.dice-roll-badge {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* faccia del dado */
+.dice-face {
+    width: 34px;
+    height: 34px;
+    border: 2px solid #8b0000;
+    border-radius: 7px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Cinzel Decorative', Georgia, serif;
+    font-size: 1em;
+    font-weight: 700;
+    color: #ff4444;
+    background: rgba(139, 0, 0, 0.12);
+    text-shadow: 0 0 8px rgba(255, 0, 0, 0.35);
+    animation: dicePop 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes dicePop {
+    0%   { transform: scale(0.4) rotate(-20deg); opacity: 0.2; }
+    100% { transform: scale(1)   rotate(0deg);   opacity: 1; }
+}
+
+/* box risultato personale */
+.dice-result-display {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 10px 14px;
+    border: 1px dashed rgba(139, 0, 0, 0.4);
+    border-radius: 8px;
+    margin-bottom: 16px;
+}
+
+.dice-result-label {
+    color: rgba(255, 204, 204, 0.5);
+    font-size: 0.7em;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+}
+
+.dice-result-value {
+    font-family: 'Cinzel Decorative', Georgia, serif;
+    font-size: 1.6em;
+    color: #ff4444;
+    text-shadow: 0 0 12px rgba(255, 0, 0, 0.4);
+}
+
+/* bottone tiro (usa le classi .btn .btn-primary già esistenti, 
+   questa classe aggiunge solo il margine e la larghezza piena) */
+.modal-btn {
+    width: 100%;
+    margin-top: 4px;
+}
+
+/* messaggio attesa */
+.modal-waiting {
+    text-align: center;
+    color: rgba(255, 204, 204, 0.4);
+    font-size: 0.68em;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    padding: 12px 0 4px;
+    animation: pulse-opacity 2s ease-in-out infinite;
+}
+
+@keyframes pulse-opacity {
+    0%, 100% { opacity: 0.4; }
+    50%       { opacity: 0.9; }
+}
+
+/* countdown finale dentro il modal */
+.modal-countdown {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 14px;
+    border: 1.5px solid #22c55e;
+    border-radius: 10px;
+    background: rgba(34, 197, 94, 0.06);
+    margin-top: 18px;
+    animation: pulse-green 1s ease-in-out infinite;
+}
+
+/* pulse-green è già definito nel CSS base per .countdown-bar,
+   se non c'è duplicarlo qui: */
+@keyframes pulse-green {
+    0%, 100% { box-shadow: 0 0 8px rgba(34, 197, 94, 0.15); }
+    50%       { box-shadow: 0 0 22px rgba(34, 197, 94, 0.45); }
+}
