@@ -105,11 +105,10 @@
         const params = new URLSearchParams(window.location.search);
         const roomId = params.get("id") || sessionStorage.getItem("roomId");
         const roomCode = sessionStorage.getItem("roomCode");
-        const isHost = sessionStorage.getItem("isHost") === "true";
 
         // Rejoin immediato prima del nome
         socket.on("connect", () => {
-            if (roomId) socket.emit("rejoin_room", { roomId, isHost });
+            if (roomId) socket.emit("rejoin_room", { roomId });
         });
 
         const nameInput  = document.getElementById("name-input");
@@ -126,8 +125,8 @@
         btnConfirm.addEventListener("click", () => confirmName(roomId));
 
         // Socket events
-        socket.on("rejoined", ({ roomId, isHost }) => {
-            console.log(`Rejoined stanza ${roomId}, isHost: ${isHost}`);
+        socket.on("rejoined", ({ roomId }) => {
+            console.log(`Rejoined stanza ${roomId}`);
         });
 
         socket.on("players_updated", ({ players }) => renderPlayers(players));

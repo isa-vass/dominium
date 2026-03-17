@@ -70,8 +70,7 @@ async function getPlayersWithNames(room) {
         players.push({
             id: socketId,
             name,
-            ready: room.readyPlayers?.has(socketId) || false,
-            isHost: room.host === socketId
+            ready: room.readyPlayers?.has(socketId) || false
         });
     }
     return players;
@@ -114,7 +113,6 @@ io.on("connection", (socket) => {
         rooms.set(roomId, {
             room_code: roomCode,
             map_id: null,
-            host: socket.id,
             players: [socket.id],
             readyPlayers: new Set(),
             selectedContinents: new Map(), // continente -> socketId
@@ -123,10 +121,9 @@ io.on("connection", (socket) => {
 
         socket.join(roomId);
         socket.request.session.roomId = roomId;
-        socket.request.session.isHost = true;
         socket.request.session.save((err) => {
             if (err) console.error("[CREATE] Errore salvataggio sessione:", err);
-            socket.emit("room_created", { roomId, roomCode, isHost: true });
+            socket.emit("room_created", { roomId, roomCode });
             io.emit("rooms_updated");
             emitPlayersUpdated(roomId);
         });
@@ -153,11 +150,10 @@ io.on("connection", (socket) => {
         room.players.push(socket.id);
         socket.join(roomId);
         socket.request.session.roomId = roomId;
-        socket.request.session.isHost = false;
 
         socket.request.session.save((err) => {
             if (err) console.error("[JOIN] Errore salvataggio sessione:", err);
-            socket.emit("room_joined", { roomId, isHost: false });
+            socket.emit("room_joined", { roomId, roomCode: room.room_code });
             io.emit("rooms_updated");
             emitPlayersUpdated(roomId);
             
@@ -174,20 +170,18 @@ io.on("connection", (socket) => {
         });
     });
 
-    socket.on("rejoin_room", ({ roomId, isHost } = {}) => {
+    socket.on("rejoin_room", ({ roomId } = {}) => {
         if (!roomId) return;
 
         const room = rooms.get(roomId);
         if (!room) return;
 
-        for (const key of [`host_${roomId}`, roomId]) {
+        for (const key of [roomId]) {
             if (deleteTimers.has(key)) {
                 clearTimeout(deleteTimers.get(key));
                 deleteTimers.delete(key);
             }
         }
-
-        if (isHost) room.host = socket.id;
 
         if (!room.players.includes(socket.id)) {
             room.players.push(socket.id);
@@ -196,7 +190,7 @@ io.on("connection", (socket) => {
         if (!room.readyPlayers) room.readyPlayers = new Set();
 
         socket.join(roomId);
-        socket.emit("rejoined", { roomId, isHost: room.host === socket.id });
+        socket.emit("rejoined", { roomId });
         io.emit("rooms_updated");
         emitPlayersUpdated(roomId);
         
@@ -233,7 +227,8 @@ io.on("connection", (socket) => {
         emitPlayersUpdated(roomId);
 
         // Controlla se tutti i 4 giocatori sono pronti
-        if (room.players.length === 4 && room.readyPlayers.size === 4) {
+        if (room.players.length === 1 && room.readyPlayers.size === 1) {
+            ///////////////////////4
             // Avvia countdown di 3 secondi
             io.to(roomId).emit("game_countdown_start", { seconds: 3 });
             
@@ -284,7 +279,6 @@ io.on("connection", (socket) => {
         const room = rooms.get(roomId);
         if (!room) return;
 
-        const isHost = room.host === socket.id;
         room.players = room.players.filter(p => p !== socket.id);
         room.readyPlayers?.delete(socket.id);
 
@@ -302,17 +296,21 @@ io.on("connection", (socket) => {
             }
         }
 
-        if (isHost) {
-            io.to(roomId).emit("host_left");
-            rooms.delete(roomId);
-            io.emit("rooms_updated");
+        // Se nessuno rimane nella stanza, elimina la stanza
+        if (room.players.length === 0) {
+            const timer = setTimeout(() => {
+                if (rooms.has(roomId) && rooms.get(roomId).players.length === 0) {
+                    rooms.delete(roomId);
+                    io.emit("rooms_updated");
+                }
+            }, 5000);
+            deleteTimers.set(roomId, timer);
         } else {
             emitPlayersUpdated(roomId);
             io.emit("rooms_updated");
         }
 
         socket.request.session.roomId = null;
-        socket.request.session.isHost = false;
         socket.request.session.save();
     });
 
@@ -320,7 +318,6 @@ io.on("connection", (socket) => {
         rooms.forEach((room, roomId) => {
             if (!room.players.includes(socket.id)) return;
 
-            const isHost = room.host === socket.id;
             room.players = room.players.filter(p => p !== socket.id);
             room.readyPlayers?.delete(socket.id);
 
@@ -338,28 +335,15 @@ io.on("connection", (socket) => {
                 }
             }
 
-            if (isHost) {
-                const oldSocketId = socket.id;
+            emitPlayersUpdated(roomId);
+            if (room.players.length === 0) {
                 const timer = setTimeout(() => {
-                    const currentRoom = rooms.get(roomId);
-                    if (currentRoom && currentRoom.host === oldSocketId) {
-                        io.to(roomId).emit("host_left");
+                    if (rooms.has(roomId) && rooms.get(roomId).players.length === 0) {
                         rooms.delete(roomId);
                         io.emit("rooms_updated");
                     }
-                }, 3000);
-                deleteTimers.set(`host_${roomId}`, timer);
-            } else {
-                emitPlayersUpdated(roomId);
-                if (room.players.length === 0) {
-                    const timer = setTimeout(() => {
-                        if (rooms.has(roomId) && rooms.get(roomId).players.length === 0) {
-                            rooms.delete(roomId);
-                            io.emit("rooms_updated");
-                        }
-                    }, 5000);
-                    deleteTimers.set(roomId, timer);
-                }
+                }, 5000);
+                deleteTimers.set(roomId, timer);
             }
         });
 

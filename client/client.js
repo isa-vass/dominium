@@ -63,16 +63,15 @@ if (btnCreate) {
     });
 }
 
-socket.on("room_created", ({ roomId, roomCode, isHost }) => {
+socket.on("room_created", ({ roomId, roomCode }) => {
     sessionStorage.setItem("roomId", roomId);
     sessionStorage.setItem("roomCode", roomCode);
-    sessionStorage.setItem("isHost", isHost);
     window.location.href = `/view/room.html?id=${roomId}`;
 });
 
-socket.on("room_joined", ({ roomId, isHost }) => {
+socket.on("room_joined", ({ roomId, roomCode }) => {
     sessionStorage.setItem("roomId", roomId);
-    sessionStorage.setItem("isHost", isHost);
+    sessionStorage.setItem("roomCode", roomCode);
     window.location.href = `/view/room.html?id=${roomId}`;
 });
 
@@ -82,8 +81,7 @@ socket.on("error", ({ message }) => {
 
 socket.on("connect", () => {
     const roomId = sessionStorage.getItem("roomId");
-    const isHost = sessionStorage.getItem("isHost") === "true";
-    if (roomId) socket.emit("rejoin_room", { roomId, isHost });
+    if (roomId) socket.emit("rejoin_room", { roomId });
 });
 
 function selectRoom(roomId) {
@@ -131,9 +129,7 @@ function initRoom(roomId) {
     if (roomId) document.getElementById("display-room-id").textContent = roomId;
 
     const roomCode = sessionStorage.getItem("roomCode");
-    const isHost = sessionStorage.getItem("isHost") === "true";
-
-    if (roomCode && isHost) {
+    if (roomCode) {
         document.getElementById("display-room-code").textContent = roomCode;
         document.getElementById("code-badge").removeAttribute("hidden");
         document.getElementById("display-room-code-2").textContent = roomCode;
@@ -185,7 +181,7 @@ function renderPlayers(players) {
         el.classList.add("player-item");
         if (p.ready) el.classList.add("ready");
         el.innerHTML = `
-            <span class="player-name">${p.name}${p.isHost ? " 👑" : ""}</span>
+            <span class="player-name">${p.name}</span>
             <span class="player-status ${p.ready ? "status-ready" : "status-waiting"}">
                 ${p.ready ? "Ready" : "Waiting"}
             </span>`;
