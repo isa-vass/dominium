@@ -1,6 +1,6 @@
 const socket = io();
 
-// HOME PAGE 
+// --- HOME PAGE ---
 const btnStart = document.getElementById("btn-start");
 const btnCredits = document.getElementById("btn-credits");
 
@@ -16,7 +16,7 @@ if (btnCredits) {
     });
 }
 
-// ACTION PAGE 
+// --- ACTION PAGE ---
 const selectionCard = document.getElementById("selection-card-rooms");
 const selectionCardJoin = document.getElementById("selection-card-join");
 const btnCreate = document.getElementById("btn-create");
@@ -103,7 +103,7 @@ function selectRoom(roomId) {
     });
 }
 
-// ROOM PAGE - Funzioni di utility
+// --- ROOM PAGE ---
 function confirmName(roomId) {
     const nameInput = document.getElementById("name-input");
     const val = nameInput.value.trim();
@@ -140,7 +140,7 @@ function initRoom(roomId) {
         document.getElementById("code-box").removeAttribute("hidden");
     }
 
-    // Continenti
+    // --- CONTINENTS ---
     document.querySelectorAll(".continent-btn").forEach(btn => {
         btn.addEventListener("click", () => {
             document.querySelectorAll(".continent-btn").forEach(b => b.classList.remove("selected"));
@@ -149,7 +149,7 @@ function initRoom(roomId) {
         });
     });
 
-    // Pronto
+    // --- READY ---
     let isReady = false;
     const btnReady = document.getElementById("btn-ready");
     btnReady.addEventListener("click", () => {
@@ -164,7 +164,7 @@ function initRoom(roomId) {
         socket.emit("player_ready", { roomId, ready: isReady });
     });
 
-    // Lascia stanza
+    // --- LEAVE ROOM ---
     document.getElementById("btn-leave").addEventListener("click", () => {
         socket.emit("leave_room", { roomId });
         fetch("/leave-room", { method: "POST" }).finally(() => {

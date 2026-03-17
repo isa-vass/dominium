@@ -269,7 +269,27 @@ io.on("connection", (socket) => {
             io.emit("rooms_updated");
         }, 100);
     });
+
+// --- GAME LOGIC ---
+    socket.on("win_chance", ({ attackerTroops, defenderTroops }) => {
+        const winner = resolveBattle(attackerTroops, defenderTroops);
+
+        socket.emit("battle_result", { winner });
+    });
 });
+
+function resolveBattle(attackerTroops, defenderTroops) {
+    if (attackerTroops > defenderTroops) {
+        return "attacker";
+    }
+
+    if (defenderTroops > attackerTroops) {
+        return "defender";
+    }
+
+    return Math.random() < 0.5 ? "attacker" : "defender";
+}
+
 
 httpServer.listen(3000, () => {
     console.log("Server in ascolto su http://localhost:3000");
