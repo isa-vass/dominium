@@ -249,3 +249,4 @@ function updateContinents(selectedContinents, currentPlayerId) {
         // Se non selezionato, rimane normale
     });
 }
+

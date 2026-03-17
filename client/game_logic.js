@@ -1,4 +1,4 @@
-        // LOGICA PANEL INIZIALE PER ORDINE DEI TURNI
+// LOGICA PANEL INIZIALE PER ORDINE DEI TURNI
         const roomId = sessionStorage.getItem("roomId"); // o come lo stai salvando
         const overlay = document.getElementById("overlay");
         const pageContent = document.getElementById("page-content");
@@ -93,7 +93,8 @@
                 startGame(turnOrder); // tua funzione per iniziare il gioco
             }, 3000);
         });
-        //FINE LOGICA PANEL INIZIALE PER ORDINE DEI TURNI
+
+//FINE LOGICA PANEL INIZIALE PER ORDINE DEI TURNI
 
 socket.on("show_action_box", () => {
     showModal();
