@@ -116,7 +116,9 @@ io.on("connection", (socket) => {
             map_id: null,
             host: socket.id,
             players: [socket.id],
-            readyPlayers: new Set()
+            readyPlayers: new Set(),
+            selectedContinents: new Map(), // continente -> socketId
+            gameCountdown: null // timer per il countdown di inizio gioco
         });
 
         socket.join(roomId);
@@ -158,6 +160,17 @@ io.on("connection", (socket) => {
             socket.emit("room_joined", { roomId, isHost: false });
             io.emit("rooms_updated");
             emitPlayersUpdated(roomId);
+            
+            // Notifica continenti selezionati a tutti i giocatori
+            room.players.forEach(playerId => {
+                const playerSocket = io.sockets.sockets.get(playerId);
+                if (playerSocket) {
+                    playerSocket.emit("continents_updated", { 
+                        selectedContinents: Object.fromEntries(room.selectedContinents),
+                        currentPlayerId: playerId
+                    });
+                }
+            });
         });
     });
 
@@ -186,6 +199,17 @@ io.on("connection", (socket) => {
         socket.emit("rejoined", { roomId, isHost: room.host === socket.id });
         io.emit("rooms_updated");
         emitPlayersUpdated(roomId);
+        
+        // Notifica continenti selezionati a tutti i giocatori
+        room.players.forEach(playerId => {
+            const playerSocket = io.sockets.sockets.get(playerId);
+            if (playerSocket) {
+                playerSocket.emit("continents_updated", { 
+                    selectedContinents: Object.fromEntries(room.selectedContinents),
+                    currentPlayerId: playerId
+                });
+            }
+        });
     });
 
     socket.on("player_ready", ({ roomId, ready }) => {
@@ -198,9 +222,55 @@ io.on("connection", (socket) => {
             room.readyPlayers.add(socket.id);
         } else {
             room.readyPlayers.delete(socket.id);
+            // Se qualcuno si "unready", cancella il countdown se attivo
+            if (room.gameCountdown) {
+                clearTimeout(room.gameCountdown);
+                room.gameCountdown = null;
+                io.to(roomId).emit("countdown_stop");
+            }
         }
 
         emitPlayersUpdated(roomId);
+
+        // Controlla se tutti i 4 giocatori sono pronti
+        if (room.players.length === 4 && room.readyPlayers.size === 4) {
+            // Avvia countdown di 3 secondi
+            io.to(roomId).emit("game_countdown_start", { seconds: 3 });
+            
+            room.gameCountdown = setTimeout(() => {
+                // Alla fine del countdown, avvia il gioco
+                io.to(roomId).emit("game_start");
+                room.gameCountdown = null;
+            }, 3000);
+        }
+    });
+
+    socket.on("select_continent", ({ roomId, continent }) => {
+        const room = rooms.get(roomId);
+        if (!room) return;
+
+        // Rimuovi selezione precedente di questo giocatore
+        for (const [cont, playerId] of room.selectedContinents) {
+            if (playerId === socket.id) {
+                room.selectedContinents.delete(cont);
+            }
+        }
+
+        // Se il continente non è già selezionato da qualcun altro, selezionalo
+        if (!room.selectedContinents.has(continent)) {
+            room.selectedContinents.set(continent, socket.id);
+        }
+
+        // Notifica tutti i giocatori nella stanza con il loro rispettivo ID
+        room.players.forEach(playerId => {
+            const playerSocket = io.sockets.sockets.get(playerId);
+            if (playerSocket) {
+                playerSocket.emit("continents_updated", { 
+                    selectedContinents: Object.fromEntries(room.selectedContinents),
+                    currentPlayerId: playerId
+                });
+            }
+        });
     });
 
     socket.on("edit_room_name", (roomName, roomId) => {
@@ -217,6 +287,20 @@ io.on("connection", (socket) => {
         const isHost = room.host === socket.id;
         room.players = room.players.filter(p => p !== socket.id);
         room.readyPlayers?.delete(socket.id);
+
+        // Cancella countdown se attivo
+        if (room.gameCountdown) {
+            clearTimeout(room.gameCountdown);
+            room.gameCountdown = null;
+            io.to(roomId).emit("countdown_stop");
+        }
+
+        // Rimuovi selezioni continenti del giocatore
+        for (const [continent, playerId] of room.selectedContinents) {
+            if (playerId === socket.id) {
+                room.selectedContinents.delete(continent);
+            }
+        }
 
         if (isHost) {
             io.to(roomId).emit("host_left");
@@ -239,6 +323,20 @@ io.on("connection", (socket) => {
             const isHost = room.host === socket.id;
             room.players = room.players.filter(p => p !== socket.id);
             room.readyPlayers?.delete(socket.id);
+
+            // Cancella countdown se attivo
+            if (room.gameCountdown) {
+                clearTimeout(room.gameCountdown);
+                room.gameCountdown = null;
+                io.to(roomId).emit("countdown_stop");
+            }
+
+            // Rimuovi selezioni continenti del giocatore
+            for (const [continent, playerId] of room.selectedContinents) {
+                if (playerId === socket.id) {
+                    room.selectedContinents.delete(continent);
+                }
+            }
 
             if (isHost) {
                 const oldSocketId = socket.id;
@@ -275,6 +373,59 @@ io.on("connection", (socket) => {
         const winner = resolveBattle(attackerTroops, defenderTroops);
 
         socket.emit("battle_result", { winner });
+    });
+
+    socket.on("roll_for_turn_order", ({ roomId }) => {
+        const room = rooms.get(roomId);
+        if (!room) return;
+
+        if (!room.turnOrderRolls) room.turnOrderRolls = {};
+
+        // Evita di tirare due volte
+        if (room.turnOrderRolls[socket.id]) return;
+
+        const roll = Math.floor(Math.random() * 6) + 1;
+        room.turnOrderRolls[socket.id] = roll;
+
+        // Notifica a tutti il tiro di questo giocatore
+        const playerName = io.sockets.sockets.get(socket.id)?.request?.session?.userName || socket.id;
+        io.to(roomId).emit("player_rolled", { socketId: socket.id, name: playerName, roll });
+
+        // Controlla se hanno tirato tutti
+        const totalPlayers = room.players.length;
+        const totalRolled = Object.keys(room.turnOrderRolls).length;
+
+        if (totalRolled === totalPlayers) {
+            // Ordina per dado decrescente, in caso di parità ri-tira
+            const sorted = Object.entries(room.turnOrderRolls)
+                .sort(([, a], [, b]) => b - a);
+
+            // Gestisci i pareggi: i giocatori con lo stesso valore tirano di nuovo
+            const topScore = sorted[0][1];
+            const tied = sorted.filter(([, v]) => v === topScore);
+
+            if (tied.length > 1) {
+                // Reset solo per i pareggiati
+                tied.forEach(([id]) => delete room.turnOrderRolls[id]);
+                const tiedNames = tied.map(([id]) =>
+                    io.sockets.sockets.get(id)?.request?.session?.userName || id
+                );
+                io.to(roomId).emit("turn_order_tie", { tiedPlayerIds: tied.map(([id]) => id), tiedNames });
+                return;
+            }
+
+            // Ordine finale
+            const turnOrder = sorted.map(([id]) => {
+                const name = io.sockets.sockets.get(id)?.request?.session?.userName || id;
+                return { socketId: id, name };
+            });
+
+            room.turnOrder = turnOrder.map(p => p.socketId);
+            room.currentTurnIndex = 0;
+            room.turnOrderRolls = {}; // pulizia
+
+            io.to(roomId).emit("turn_order_decided", { turnOrder });
+        }
     });
 });
 

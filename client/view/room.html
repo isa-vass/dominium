@@ -131,10 +131,12 @@
         });
 
         socket.on("players_updated", ({ players }) => renderPlayers(players));
-        socket.on("countdown_start", ({ seconds }) => startCountdown(seconds));
+        socket.on("continents_updated", ({ selectedContinents, currentPlayerId }) => updateContinents(selectedContinents, currentPlayerId));
+        socket.on("countdown_start", ({ seconds }) => startCountdown(seconds, "normal"));
+        socket.on("game_countdown_start", ({ seconds }) => startCountdown(seconds, "game"));
         socket.on("countdown_stop", () => stopCountdown());
         socket.on("game_start", () => {
-            window.location.href = `/view/game.html?id=${roomId}`;
+            window.location.href = `/view/game_home.html?id=${roomId}`;
         });
 
         socket.on("host_left", () => {

@@ -143,6 +143,9 @@ function initRoom(roomId) {
     // --- CONTINENTS ---
     document.querySelectorAll(".continent-btn").forEach(btn => {
         btn.addEventListener("click", () => {
+            // Non permettere di cliccare su continenti bloccati
+            if (btn.classList.contains("locked")) return;
+            
             document.querySelectorAll(".continent-btn").forEach(b => b.classList.remove("selected"));
             btn.classList.add("selected");
             socket.emit("select_continent", { roomId, continent: btn.dataset.continent });
@@ -197,11 +200,20 @@ function renderPlayers(players) {
 }
 
 let countdownInterval = null;
-function startCountdown(seconds) {
+function startCountdown(seconds, type = "normal") {
     const bar = document.getElementById("countdown-bar");
     const number = document.getElementById("countdown-number");
     const fill = document.getElementById("countdown-fill");
+    const text = document.getElementById("countdown-text");
+    
     bar.classList.add("visible");
+    
+    if (type === "game") {
+        text.textContent = "Game starting in";
+    } else {
+        text.textContent = "The game starts in";
+    }
+    
     let remaining = seconds;
     number.textContent = remaining;
     fill.style.width = "100%";
@@ -216,4 +228,24 @@ function startCountdown(seconds) {
 function stopCountdown() {
     clearInterval(countdownInterval);
     document.getElementById("countdown-bar").classList.remove("visible");
+}
+
+// Aggiorna l'aspetto dei bottoni dei continenti
+function updateContinents(selectedContinents, currentPlayerId) {
+    document.querySelectorAll(".continent-btn").forEach(btn => {
+        const continent = btn.dataset.continent;
+        const selectedBy = selectedContinents[continent];
+        
+        // Rimuovi tutte le classi precedenti
+        btn.classList.remove("selected", "locked");
+        
+        if (selectedBy === currentPlayerId) {
+            // Selezionato dall'utente corrente
+            btn.classList.add("selected");
+        } else if (selectedBy) {
+            // Selezionato da un altro utente - appare bloccato
+            btn.classList.add("locked");
+        }
+        // Se non selezionato, rimane normale
+    });
 }
