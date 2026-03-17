@@ -173,6 +173,16 @@
     <script src="/game_logic.js"></script>
 
     <script>
+        const params = new URLSearchParams(window.location.search);
+        const roomId = params.get("id") || sessionStorage.getItem("roomId");
+
+        // Rejoin immediato
+        socket.on("connect", () => {
+            if (roomId) socket.emit("rejoin_room", { roomId });
+        });
+    </script>
+
+    <script>
         // ── MAP TOOLTIP ──
         const provinces = {
             'province-1': { name: 'Haygram', continent: 'Kingdom of Fimia', owner: '', troups: 0 },
