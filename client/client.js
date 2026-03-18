@@ -86,7 +86,8 @@ socket.on("connect", () => {
 
 //game_start ora reindirizza a game_home.html (non map.html)
 socket.on("game_start", () => {
-    window.location.href = "/view/game_home.html";
+    const roomId = sessionStorage.getItem("roomId");
+    window.location.href = "/view/game_home.html?id=" + roomId;
 });
 
 function selectRoom(roomId) {
@@ -109,8 +110,11 @@ function selectRoom(roomId) {
 function confirmName(roomId) {
     const nameInput = document.getElementById("name-input");
     const val = nameInput.value.trim();
+    console.log("confirmName called, val:", val);
     if (!val) return;
 
+    sessionStorage.setItem("playerName", val);
+    console.log("saved playerName:", sessionStorage.getItem("playerName"));
     socket.emit("set_name", val);
 
     document.getElementById("name-container").style.display = "none";

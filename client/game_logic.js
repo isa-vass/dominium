@@ -9,6 +9,8 @@ const diceRollsList = document.getElementById("dice-rolls-list");
 const modalTitle = document.getElementById("modal-title");
 const modalDesc = document.getElementById("modal-desc");
 
+console.log("game_logic.js loaded, btnRoll:", btnRoll, "socket:", socket);
+
 function showModal() {
     overlay.style.display = "flex";
     pageContent.classList.add("blur");
@@ -22,6 +24,26 @@ function hideModal() {
 // Mostra il modal all'avvio del gioco
 showModal();
 
+// Imposta l'info panel
+const playerName = sessionStorage.getItem("playerName") || "Giocatore";
+console.log("playerName from storage:", playerName);
+document.getElementById("pp-name").textContent = playerName;
+
+const playerContinent = sessionStorage.getItem("playerContinent");
+document.getElementById("pp-continent").textContent = playerContinent;
+
+
+// Rejoin room se necessario
+const roomIdFromUrl = new URLSearchParams(window.location.search).get("id");
+const roomId = roomIdFromUrl || sessionStorage.getItem("roomId");
+if (roomId && socket.connected) {
+    socket.emit("rejoin_room", { roomId });
+} else if (roomId) {
+    socket.on("connect", () => {
+        socket.emit("rejoin_room", { roomId });
+    });
+}
+
 function getRoomId() {
     const rid = sessionStorage.getItem("roomId")
         || localStorage.getItem("roomId")
@@ -33,7 +55,7 @@ function getRoomId() {
 
 btnRoll.addEventListener("click", () => {
     const rId = getRoomId();
-    console.log("[btnRoll] roomId:", rId, "socket:", socket.id);
+    console.log("[btnRoll] roomId:", rId, "socket:", socket.id, "connected:", socket.connected);
 
     if (!rId) {
         console.warn("[btnRoll] roomId mancante");
@@ -42,10 +64,17 @@ btnRoll.addEventListener("click", () => {
         return;
     }
 
+    if (!socket.connected) {
+        console.warn("[btnRoll] socket non connesso");
+        modalDesc.textContent = "Errore: connessione persa, ricarica la pagina.";
+        return;
+    }
+
     sessionStorage.setItem("roomId", rId);
 
     btnRoll.disabled = true;
     btnRoll.textContent = "Dado tirato!";
+    console.log("[btnRoll] emitting roll_for_turn_order");
     socket.emit("roll_for_turn_order", { roomId: rId });
 });
 
@@ -112,6 +141,12 @@ socket.on("turn_order_tie", ({ tiedPlayerIds, tiedNames }) => {
 
 // Ordine finale deciso
 socket.on("turn_order_decided", ({ turnOrder }) => {
+    // Aggiorna il nome del player nel panel
+    const myEntry = turnOrder.find(p => p.socketId === socket.id);
+    if (myEntry) {
+        document.getElementById("pp-name").textContent = myEntry.name;
+    }
+
     modalTitle.textContent = "Ordine Turni Stabilito!";
     modalDesc.textContent = "La partita sta per iniziare...";
     diceRollsList.innerHTML = "";

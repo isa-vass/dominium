@@ -632,6 +632,18 @@ body::before {
     /* evita click sullo sfondo */
 }
 
+/* Fullscreen adjustments */
+:fullscreen body {
+    padding: 0 !important;
+    margin: 0 !important;
+    background: #1a1f2e !important;
+}
+
+:fullscreen .map-wrapper {
+    width: 100vw !important;
+    height: 100vh !important;
+}
+
 /* Overlay scuro */
 #overlay {
     position: fixed;
