@@ -130,7 +130,7 @@ socket.on("turn_order_decided", ({ turnOrder }) => {
         diceRollsList.appendChild(row);
     });
 
-    let sec = 3;
+    let sec = 5;
     const countdownEl = document.getElementById("modal-countdown");
     const countdownNum = document.getElementById("modal-countdown-num");
     const countdownFill = document.getElementById("modal-countdown-fill");
@@ -143,7 +143,7 @@ socket.on("turn_order_decided", ({ turnOrder }) => {
         const iv = setInterval(() => {
             sec--;
             countdownNum.textContent = sec;
-            countdownFill.style.width = (sec / 3 * 100) + "%";
+            countdownFill.style.width = (sec / 5 * 100) + "%";
             if (sec <= 0) {
                 clearInterval(iv);
                 hideModal();
@@ -154,7 +154,7 @@ socket.on("turn_order_decided", ({ turnOrder }) => {
         setTimeout(() => {
             hideModal();
             startGame(turnOrder);
-        }, 3000);
+        }, 5000);
     }
 });
 
