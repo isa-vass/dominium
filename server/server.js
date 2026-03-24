@@ -454,6 +454,9 @@ io.on("connection", (socket) => {
 
             room.turnOrder = turnOrder.map(p => p.socketId);
             room.currentTurnIndex = 0;
+
+            // Salva i roll iniziali prima di resettare
+            const initialTurnRolls = { ...room.turnOrderRolls };
             room.turnOrderRolls = {}; // pulizia
 
             // Inizializza lo stato del gioco
@@ -480,10 +483,11 @@ io.on("connection", (socket) => {
 
             // Assegna truppe iniziali basate sul roll
             room.players.forEach(socketId => {
-                const roll = room.turnOrderRolls[socketId]; // il roll è già stato salvato
+                const roll = initialTurnRolls[socketId];
                 if (roll) {
                     const totalTroops = calculateInitialTroops(roll);
-                    const playerProvinces = Object.keys(room.provinces).filter(id => room.provinces[id].owner === socketId);
+                    const playerName = room.playerNames[socketId];
+                    const playerProvinces = Object.keys(room.provinces).filter(id => room.provinces[id].owner === playerName);
                     distributeInitialTroops(room, playerProvinces, totalTroops);
                 }
             });
@@ -527,6 +531,14 @@ io.on("connection", (socket) => {
             turnOrder: room.turnOrder,
             currentTurnIndex: room.currentTurnIndex
         });
+    });
+
+    socket.on("check_turn_order_status", ({ roomId }) => {
+        const room = rooms.get(roomId);
+        if (!room) return;
+        // Ritorna true se i turni sono già stati decisi
+        const isDecided = !!room.turnOrder && room.turnOrder.length > 0;
+        socket.emit("turn_order_status", { isDecided, turnOrder: room.turnOrder || [] });
     });
 });
 

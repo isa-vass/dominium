@@ -23,8 +23,8 @@ function hideModal() {
     pageContent.classList.remove("blur");
 }
 
-// Mostra il modal all'avvio del gioco
-showModal();
+// Flag per evitare il loop infinito della roll UI
+let gameHasStarted = false;
 
 // Imposta l'info panel
 const playerName = sessionStorage.getItem("playerName") || "Giocatore";
@@ -34,16 +34,49 @@ document.getElementById("pp-name").textContent = playerName;
 const playerContinent = sessionStorage.getItem("playerContinent");
 document.getElementById("pp-continent").textContent = playerContinent;
 
+// Controlla se il gioco è già iniziato (persiste tra reload)
+const gameAlreadyStarted = sessionStorage.getItem("gameStarted") === "true";
+if (gameAlreadyStarted) {
+    console.log("[game_logic] Gioco già iniziato, skipping dice modal.");
+    gameHasStarted = true;
+    hideModal();
+}
+
 
 // Rejoin room se necessario
 const roomIdFromUrl = new URLSearchParams(window.location.search).get("id");
 const roomId = roomIdFromUrl || sessionStorage.getItem("roomId");
+
+// Controlla lo stato dei turni al caricamento della pagina
+function checkGameState() {
+    if (roomId && socket.connected) {
+        socket.emit("check_turn_order_status", { roomId });
+    }
+}
+
 if (roomId && socket.connected) {
+    checkGameState();
     socket.emit("rejoin_room", { roomId });
 } else if (roomId) {
     socket.on("connect", () => {
+        checkGameState();
         socket.emit("rejoin_room", { roomId });
     });
+}
+
+// Listener per lo stato dei turni
+socket.on("turn_order_status", ({ isDecided, turnOrder }) => {
+    console.log("[turn_order_status] isDecided:", isDecided, "turnOrder:", turnOrder);
+    if (isDecided && !gameHasStarted) {
+        gameHasStarted = true;
+        hideModal();
+        console.log("[turn_order_status] Turn order già deciso, nascondo il pannello del dado.");
+    }
+});
+
+// Mostra il modal solo se il gioco non è iniziato
+if (!gameHasStarted) {
+    showModal();
 }
 
 function getRoomId() {
@@ -202,9 +235,10 @@ socket.on("turn_order_decided", ({ turnOrder, playerContinents }) => {
 
 function startGame(turnOrder) {
     console.log("Gioco iniziato, ordine turni:", turnOrder);
-    const roomId = getRoomId();
-    // Naviga a game_home.html dove inizierà il gioco effettivo
-    window.location.href = "/view/game_home.html?id=" + roomId;
+    gameHasStarted = true;
+    sessionStorage.setItem("gameStarted", "true"); // Salva lo stato persistentemente
+    hideModal();
+    // Attiva la visualizzazione mappa/stato del gioco già caricati
 }
 
 function getMyRoll() {
