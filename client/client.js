@@ -158,6 +158,10 @@ function initRoom(roomId) {
     let isReady = false;
     const btnReady = document.getElementById("btn-ready");
     btnReady.addEventListener("click", () => {
+        if (!hasSelectedContinent) {
+            alert("Seleziona un continente prima di metterti pronto");
+            return;
+        }
         isReady = !isReady;
         if (isReady) {
             btnReady.textContent = "NOT READY";
@@ -232,6 +236,7 @@ function stopCountdown() {
     document.getElementById("countdown-bar").classList.remove("visible");
 }
 
+let hasSelectedContinent = false;
 function updateContinents(selectedContinents, currentPlayerId) {
     document.querySelectorAll(".continent-btn").forEach(btn => {
         const continent = btn.dataset.continent;
@@ -245,6 +250,7 @@ function updateContinents(selectedContinents, currentPlayerId) {
             btn.classList.add("locked");
         }
     });
+    hasSelectedContinent = Object.values(selectedContinents).includes(currentPlayerId);
 }
 
 // --- SOCKET EVENTS per room page ---

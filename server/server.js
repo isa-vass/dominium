@@ -216,6 +216,11 @@ io.on("connection", (socket) => {
 
         if (!room.readyPlayers) room.readyPlayers = new Set();
 
+        if (ready && !Array.from(room.selectedContinents.values()).includes(socket.id)) {
+            socket.emit("error", { message: "Devi selezionare un continente prima di metterti pronto" });
+            return;
+        }
+
         if (ready) {
             room.readyPlayers.add(socket.id);
         } else {
