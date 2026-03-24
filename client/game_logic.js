@@ -9,6 +9,8 @@ const diceRollsList = document.getElementById("dice-rolls-list");
 const modalTitle = document.getElementById("modal-title");
 const modalDesc = document.getElementById("modal-desc");
 
+let myRoll = null; // Variabile per memorizzare il roll del giocatore
+
 console.log("game_logic.js loaded, btnRoll:", btnRoll, "socket:", socket);
 
 function showModal() {
@@ -112,6 +114,7 @@ socket.on("player_rolled", ({ socketId, name, roll }) => {
     rows.forEach(r => diceRollsList.appendChild(r));
 
     if (isMe) {
+        myRoll = roll; // Memorizza il roll per riutilizzo
         diceResultDisplay.style.display = "block";
         myRollValue.textContent = roll;
         waitingMsg.style.display = "block";
@@ -140,11 +143,15 @@ socket.on("turn_order_tie", ({ tiedPlayerIds, tiedNames }) => {
 });
 
 // Ordine finale deciso
-socket.on("turn_order_decided", ({ turnOrder }) => {
+socket.on("turn_order_decided", ({ turnOrder, playerContinents }) => {
     // Aggiorna il nome del player nel panel
     const myEntry = turnOrder.find(p => p.socketId === socket.id);
     if (myEntry) {
         document.getElementById("pp-name").textContent = myEntry.name;
+        document.getElementById("pp-continent").textContent = myEntry.continent;
+        // Salva il continente in sessionStorage per uso successivo
+        sessionStorage.setItem("playerContinent", myEntry.continent);
+        sessionStorage.setItem("playerName", myEntry.name);
     }
 
     modalTitle.textContent = "Ordine Turni Stabilito!";
@@ -195,6 +202,24 @@ socket.on("turn_order_decided", ({ turnOrder }) => {
 
 function startGame(turnOrder) {
     console.log("Gioco iniziato, ordine turni:", turnOrder);
+    const roomId = getRoomId();
+    // Naviga a game_home.html dove inizierà il gioco effettivo
+    window.location.href = "/view/game_home.html?id=" + roomId;
+}
+
+function getMyRoll() {
+    return myRoll;
+}
+
+function troopAssignment(playerTroops) {
+    const roll = getMyRoll();
+    if (roll) {
+        const totalTroops = playerTroops + roll;
+        console.log(`Truppe assegnate: ${totalTroops} (base: ${playerTroops}, roll: ${roll})`);
+        // Qui puoi aggiungere la logica per distribuire le truppe
+    } else {
+        console.warn("Roll non disponibile per assegnazione truppe");
+    }
 }
 
 // --- BATTLE LOGIC ---
@@ -202,8 +227,30 @@ socket.on("show_action_box", () => {
     showModal();
 });
 
-socket.on("hide_action_box", () => {
-    hideModal();
+socket.on("game_state", ({ provinces: serverProvinces, turnOrder, currentTurnIndex, playerNames, playerContinents }) => {
+    // Aggiorna le province con i dati dal server
+    Object.keys(serverProvinces).forEach(id => {
+        if (provinces[id]) {
+            provinces[id] = { ...provinces[id], ...serverProvinces[id] };
+        }
+    });
+    // Aggiorna l'info panel con il continente del player
+    const myContinent = playerContinents[socket.id];
+    if (myContinent) {
+        document.getElementById("pp-continent").textContent = myContinent;
+        sessionStorage.setItem("playerContinent", myContinent);
+    }
+    console.log("Stato gioco ricevuto:", provinces);
+});
+
+socket.on("turn_advanced", ({ currentTurnIndex, provinces: updatedProvinces }) => {
+    // Aggiorna le province
+    Object.keys(updatedProvinces).forEach(id => {
+        if (provinces[id]) {
+            provinces[id] = { ...provinces[id], ...updatedProvinces[id] };
+        }
+    });
+    console.log("Turno avanzato, province aggiornate");
 });
 
 function attack(attackerTroops, defenderTroops) {

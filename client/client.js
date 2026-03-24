@@ -150,7 +150,9 @@ function initRoom(roomId) {
             if (btn.classList.contains("locked")) return;
             document.querySelectorAll(".continent-btn").forEach(b => b.classList.remove("selected"));
             btn.classList.add("selected");
-            socket.emit("select_continent", { roomId, continent: btn.dataset.continent });
+            const continent = btn.dataset.continent;
+            sessionStorage.setItem("playerContinent", continent);
+            socket.emit("select_continent", { roomId, continent });
         });
     });
 
