@@ -1,5 +1,27 @@
 const socket = io();
 
+// --- LEGGI SESSIONE PHP E IMPOSTA IL NOME SU NODE.JS ---
+async function initSessionFromPHP() {
+    try {
+        const res = await fetch("/auth/session");
+        const data = await res.json();
+
+        if (!data.loggedIn) {
+            window.location.href = "/login.html";
+            return;
+        }
+
+        sessionStorage.setItem("idU", data.idU);
+        sessionStorage.setItem("email", data.email);
+
+        // Usa la parte prima della @ come nome nel gioco
+        socket.emit("set_name", data.email.split("@")[0]);
+
+    } catch (err) {
+        console.error("Errore sessione:", err);
+    }
+}
+
 // --- HOME PAGE ---
 const btnStart = document.getElementById("btn-start");
 const btnCredits = document.getElementById("btn-credits");
@@ -80,11 +102,11 @@ socket.on("error", ({ message }) => {
 });
 
 socket.on("connect", () => {
+    initSessionFromPHP();
     const roomId = sessionStorage.getItem("roomId");
     if (roomId) socket.emit("rejoin_room", { roomId });
 });
 
-//game_start ora reindirizza a game_home.html (non map.html)
 socket.on("game_start", () => {
     const roomId = sessionStorage.getItem("roomId");
     window.location.href = "/view/game_home.html?id=" + roomId;
@@ -107,22 +129,6 @@ function selectRoom(roomId) {
 }
 
 // --- ROOM PAGE ---
-function confirmName(roomId) {
-    const nameInput = document.getElementById("name-input");
-    const val = nameInput.value.trim();
-    console.log("confirmName called, val:", val);
-    if (!val) return;
-
-    sessionStorage.setItem("playerName", val);
-    console.log("saved playerName:", sessionStorage.getItem("playerName"));
-    socket.emit("set_name", val);
-
-    document.getElementById("name-container").style.display = "none";
-    document.getElementById("room-container").style.display = "block";
-
-    initRoom(roomId);
-}
-
 function initRoom(roomId) {
     history.pushState(null, null, window.location.href);
     window.addEventListener("popstate", () => {
@@ -183,6 +189,13 @@ function initRoom(roomId) {
             window.location.href = "/view/action.html";
         });
     });
+}
+
+// La funzione confirmName non serve più, il nome viene preso dalla sessione PHP.
+// Tuttavia la manteniamo come fallback nel caso room.html la chiami ancora,
+// così non crasha. Puoi rimuoverla quando aggiorni room.html.
+function confirmName(roomId) {
+    initRoom(roomId);
 }
 
 function renderPlayers(players) {
