@@ -2,5 +2,8 @@
   "dependencies": {
     "cookie-parser": "^1.4.7",
     "express-session": "^1.19.0"
+  },
+  "scripts": {
+    "start": "sudo service mysql start && node server.js"
   }
 }
