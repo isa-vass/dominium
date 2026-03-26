@@ -443,7 +443,7 @@ io.on("connection", (socket) => {
             room.turnOrderRolls = {}; // pulizia
 
             // Inizializza lo stato del gioco
-            room.provinces = JSON.parse(JSON.stringify(provinces)); // copia profonda
+           // room.provinces = JSON.parse(JSON.stringify(provinces)); // copia profonda
             room.turnCount = 0; // contatore turni globali
             room.playerTurnCounts = {};
             room.players.forEach(id => room.playerTurnCounts[id] = 0);
@@ -470,13 +470,13 @@ io.on("connection", (socket) => {
                 if (roll) {
                     const totalTroops = calculateInitialTroops(roll);
                     const playerName = room.playerNames[socketId];
-                    const playerProvinces = Object.keys(room.provinces).filter(id => room.provinces[id].owner === playerName);
-                    distributeInitialTroops(room, playerProvinces, totalTroops);
+                    //const playerProvinces = Object.keys(room.provinces).filter(id => room.provinces[id].owner === playerName);
+                    distributeInitialTroops(room, totalTroops);
                 }
             });
 
             // Invia lo stato iniziale del gioco ai client
-            io.to(roomId).emit("game_state", { provinces: room.provinces, turnOrder: room.turnOrder, currentTurnIndex: room.currentTurnIndex, playerNames: room.playerNames, playerContinents: room.playerContinents });
+            //io.to(roomId).emit("game_state", { provinces: room.provinces, turnOrder: room.turnOrder, currentTurnIndex: room.currentTurnIndex, playerNames: room.playerNames, playerContinents: room.playerContinents });
 
             io.to(roomId).emit("turn_order_decided", { turnOrder, playerContinents: room.playerContinents });
         }
@@ -496,20 +496,20 @@ io.on("connection", (socket) => {
         // Controlla rinforzi ogni 3 turni del giocatore
         if (room.playerTurnCounts[currentPlayer] % 3 === 0) {
             const reinforcementRoll = Math.floor(Math.random() * 6) + 1;
-            const playerProvinces = Object.keys(room.provinces).filter(id => room.provinces[id].owner === room.playerNames[currentPlayer]);
+            //const playerProvinces = Object.keys(room.provinces).filter(id => room.provinces[id].owner === room.playerNames[currentPlayer]);
             // Aggiungi truppe di rinforzo (distribuisci il roll)
             distributeReinforcementTroops(room, playerProvinces, reinforcementRoll);
         }
 
         // Invia aggiornamento stato
-        io.to(roomId).emit("turn_advanced", { currentTurnIndex: room.currentTurnIndex, provinces: room.provinces });
+       // io.to(roomId).emit("turn_advanced", { currentTurnIndex: room.currentTurnIndex, provinces: room.provinces });
     });
 
     socket.on("get_game_state", ({ roomId }) => {
         const room = rooms.get(roomId);
         if (!room) return;
         socket.emit("game_state_update", { 
-            provinces: room.provinces, 
+           // provinces: room.provinces, 
             playerNames: room.playerNames,
             turnOrder: room.turnOrder,
             currentTurnIndex: room.currentTurnIndex
@@ -539,7 +539,7 @@ function resolveBattle(attackerTroops, defenderTroops) {
 
 // Funzione per ottenere le province di un continente
 function getProvincesByContinent(continent) {
-    return Object.keys(provinces).filter(id => provinces[id].continent === continent);
+    //return Object.keys(provinces).filter(id => provinces[id].continent === continent);
 }
 
 // Funzione per calcolare truppe iniziali basate sul roll
@@ -557,13 +557,13 @@ function distributeInitialTroops(room, provinceIds, totalTroops) {
     if (totalTroops < numProvinces) return; // non dovrebbe accadere
 
     // Assegna 1 truppa a ciascuna provincia
-    provinceIds.forEach(id => room.provinces[id].troops = 1);
+    //provinceIds.forEach(id => room.provinces[id].troops = 1);
     let remaining = totalTroops - numProvinces;
 
     // Distribuisci le rimanenti equamente
     let i = 0;
     while (remaining > 0) {
-        room.provinces[provinceIds[i % numProvinces]].troops += 1;
+        //room.provinces[provinceIds[i % numProvinces]].troops += 1;
         remaining--;
         i++;
     }
@@ -574,7 +574,7 @@ function distributeReinforcementTroops(room, provinceIds, totalTroops) {
     // Distribuisci equamente le truppe di rinforzo
     let i = 0;
     for (let t = 0; t < totalTroops; t++) {
-        room.provinces[provinceIds[i % provinceIds.length]].troops += 1;
+       // room.provinces[provinceIds[i % provinceIds.length]].troops += 1;
         i++;
     }
 }

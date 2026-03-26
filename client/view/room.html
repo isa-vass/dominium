@@ -106,9 +106,9 @@
         const roomId = params.get("id") || sessionStorage.getItem("roomId");
         const roomCode = sessionStorage.getItem("roomCode");
 
-        // Rejoin immediato prima del nome
+        // Rejoin immediato (solo se già nella stanza, ma ora il nome è obbligatorio prima)
         socket.on("connect", () => {
-            if (roomId) socket.emit("rejoin_room", { roomId });
+            // Non emettere rejoin_room qui, poiché il nome deve essere confermato prima
         });
 
         const nameInput  = document.getElementById("name-input");
@@ -124,7 +124,18 @@
 
         btnConfirm.addEventListener("click", () => confirmName(roomId));
 
-        // Socket events
+        // Modifica confirmName per emettere set_name e cambiare UI
+        function confirmName(roomId) {
+            const name = nameInput.value.trim();
+            if (!name) return; // Non procedere se il nome è vuoto
+
+            socket.emit("set_name", name); // Imposta il nome obbligatorio
+            document.getElementById("name-container").style.display = "none";
+            document.getElementById("room-container").style.display = "block";
+            initRoom(roomId);
+        }
+
+        // Socket events (invariati)
         socket.on("rejoined", ({ roomId }) => {
             console.log(`Rejoined stanza ${roomId}`);
         });
