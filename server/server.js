@@ -430,21 +430,21 @@ io.on("connection", (socket) => {
             }
 
             // Ordine finale
-            const turnOrder = sorted.map(([id]) => {
+            const turnOrder = sorted.map(([id, roll]) => {
                 const name = io.sockets.sockets.get(id)?.request?.session?.userName || id;
                 const continent = Array.from(room.selectedContinents.entries())
                     .find(([, socketId]) => socketId === id)?.[0] || "";
-                return { socketId: id, name, continent };
+                return { socketId: id, name, continent, troops: troopAssignment(roll, 0) }; // valido solo per il primo turno, poi bisogna passare le truppe reali del giocatore invece di 0
             });
 
             room.turnOrder = turnOrder.map(p => p.socketId);
             room.currentTurnIndex = 0;
             room.turnOrderRolls = {}; // pulizia
 
-            // Nuova emissione indispensabile
+            //emissione 
             io.to(effectiveRoomId).emit("turn_order_decided", {
                 turnOrder,
-                playerContinents: Object.fromEntries(room.selectedContinents)
+                playerContinents: Object.fromEntries(room.selectedContinents),
             });
         }
     });
@@ -494,4 +494,36 @@ function scheduleDeleteRoom(roomId) {
         debugRooms(`rooms.delete(${roomId}) timeout`);
     }, 5000); // o 10000
     deleteTimers.set(roomId, timer);
+}
+
+function troopAssignment(roll, playerTroops) {
+    let totalTroops = playerTroops;
+    let troopsAssigned = false;
+    switch(roll) {
+        case 1:
+        case 2:
+            totalTroops = playerTroops + 4;
+            troopsAssigned = true;
+            break;
+        case 3:
+        case 4:
+            totalTroops = playerTroops + 5;
+            troopsAssigned = true;
+            break;
+        case 5:
+            totalTroops = playerTroops + 6;
+            troopsAssigned = true;
+            break;
+        case 6:
+            totalTroops = playerTroops + 7;
+            troopsAssigned = true;
+            break;
+    }
+    if(troopsAssigned) { 
+        console.log(`Truppe assegnate: ${totalTroops} (base: ${playerTroops}, roll: ${roll})`);
+        return totalTroops;
+    } else {
+        console.warn("Roll non disponibile per assegnazione truppe");
+        return null;
+    }
 }
