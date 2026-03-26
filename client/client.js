@@ -11,11 +11,12 @@ async function initSessionFromPHP() {
             return;
         }
 
+        // Rimuovi questa riga: non impostare più il nome automaticamente dall'email
+        // socket.emit("set_name", data.email.split("@")[0]);
+
+        // Salva solo i dati di sessione per altri usi (es. ID utente)
         sessionStorage.setItem("idU", data.idU);
         sessionStorage.setItem("email", data.email);
-
-        // Usa la parte prima della @ come nome nel gioco
-        socket.emit("set_name", data.email.split("@")[0]);
 
     } catch (err) {
         console.error("Errore sessione:", err);

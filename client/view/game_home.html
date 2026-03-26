@@ -269,32 +269,6 @@
             });
         });
 
-        
-        // Sincronizzazione con server
-        const roomId = new URLSearchParams(window.location.search).get("id") || sessionStorage.getItem("roomId");
-        const playerName = sessionStorage.getItem("playerName");
-        const playerContinent = sessionStorage.getItem("playerContinent");
-
-        // Aggiorna il panel con il continente
-        document.getElementById("pp-continent").textContent = playerContinent || "In attesa...";
-
-        // Richiedi lo stato del gioco al server quando la pagina carica
-        if (socket && roomId) {
-            socket.emit("get_game_state", { roomId });
-        }
-
-        // Ricevi gli aggiornamenti dello stato del gioco
-        socket.on("game_state_update", ({ provinces: updatedProvinces, playerNames }) => {
-            // Aggiorna i dati delle province dal server
-            Object.keys(updatedProvinces || {}).forEach(id => {
-                if (provinces[id]) {
-                    provinces[id].owner = updatedProvinces[id].owner;
-                    provinces[id].troups = updatedProvinces[id].troops;
-                }
-            });
-            console.log("Province aggiornate dal server");
-        });
-
         // Event listener per aggiornamenti turno
         socket.on("turn_advanced", ({ currentTurnIndex, provinces: updatedProvinces }) => {
             // Aggiorna le province

@@ -261,32 +261,6 @@ socket.on("show_action_box", () => {
     showModal();
 });
 
-socket.on("game_state", ({ provinces: serverProvinces, turnOrder, currentTurnIndex, playerNames, playerContinents }) => {
-    // Aggiorna le province con i dati dal server
-    Object.keys(serverProvinces).forEach(id => {
-        if (provinces[id]) {
-            provinces[id] = { ...provinces[id], ...serverProvinces[id] };
-        }
-    });
-    // Aggiorna l'info panel con il continente del player
-    const myContinent = playerContinents[socket.id];
-    if (myContinent) {
-        document.getElementById("pp-continent").textContent = myContinent;
-        sessionStorage.setItem("playerContinent", myContinent);
-    }
-    console.log("Stato gioco ricevuto:", provinces);
-});
-
-socket.on("turn_advanced", ({ currentTurnIndex, provinces: updatedProvinces }) => {
-    // Aggiorna le province
-    Object.keys(updatedProvinces).forEach(id => {
-        if (provinces[id]) {
-            provinces[id] = { ...provinces[id], ...updatedProvinces[id] };
-        }
-    });
-    console.log("Turno avanzato, province aggiornate");
-});
-
 function attack(attackerTroops, defenderTroops) {
     socket.emit("win_chance", { attackerTroops, defenderTroops });
 }
