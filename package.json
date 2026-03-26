@@ -4,6 +4,6 @@
     "express-session": "^1.19.0"
   },
   "scripts": {
-   "start": "sudo service mysql start && node server/server.js"
+   "start": "sudo apt-get install -y mysql-server -qq && sudo service mysql start && node server/server.js"
   }
 }

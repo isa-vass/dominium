@@ -176,7 +176,7 @@ socket.on("turn_order_tie", ({ tiedPlayerIds, tiedNames }) => {
 });
 
 // Ordine finale deciso
-socket.on("turn_order_decided", ({ turnOrder, playerContinents }) => {
+socket.on("turn_order_decided", ({ turnOrder, playerContinents, playerTroops }) => {
 
     console.log("[turn_order_decided] playerContinents full:", playerContinents);
     const myContinent = playerContinents[socket.id];
@@ -189,14 +189,18 @@ socket.on("turn_order_decided", ({ turnOrder, playerContinents }) => {
     const continentToShow = myContinent || "nessun continente";
     document.getElementById("pp-continent").textContent = continentToShow;
 
+    const startingTroops = troopAssignment(playerTroops[socket.id]); // Assegna truppe in base al roll
+
     const myEntry = turnOrder.find(p => p.socketId === socket.id);
     console.log("myEntry:", myEntry);
     if (myEntry) {
         document.getElementById("pp-name").textContent = myEntry.name;
         document.getElementById("pp-continent").textContent = myEntry.continent;
+        document.getElementById("pp-troops").textContent = myEntry.troops || "N/A";
         // Salva il continente in sessionStorage per uso successivo
         sessionStorage.setItem("playerContinent", myEntry.continent);
         sessionStorage.setItem("playerName", myEntry.name);
+        sessionStorage.setItem("playerTroops", myEntry.troops || "N/A");
     }
 
     modalTitle.textContent = "Ordine Turni Stabilito!";
@@ -256,15 +260,36 @@ function startGame(turnOrder) {
 function getMyRoll() {
     return myRoll;
 }
+    
 
 function troopAssignment(playerTroops) {
     const roll = getMyRoll();
-    if (roll) {
-        const totalTroops = playerTroops + roll;
+    const totalTroops = playerTroops;
+    const troopsAssigned = false;
+    switch(roll) {
+        case 1||2:
+            totalTroops = playerTroops + 4;
+            troopsAssigned = true;
+            break;
+        case 3||4:
+            totalTroops = playerTroops + 5;
+            troopsAssigned = true;
+            break;
+        case 5:
+            totalTroops = playerTroops + 6;
+            troopsAssigned = true;
+            break;
+        case 6:
+            totalTroops = playerTroops + 7;
+            troopsAssigned = true;
+            break;
+    }
+    if(troopsAssigned) { 
         console.log(`Truppe assegnate: ${totalTroops} (base: ${playerTroops}, roll: ${roll})`);
-        // Qui puoi aggiungere la logica per distribuire le truppe
+        return totalTroops;
     } else {
         console.warn("Roll non disponibile per assegnazione truppe");
+        return null;
     }
 }
 
