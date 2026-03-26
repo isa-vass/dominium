@@ -270,15 +270,15 @@
         });
 
         // Event listener per aggiornamenti turno
-        socket.on("turn_advanced", ({ currentTurnIndex, provinces: updatedProvinces }) => {
+       //socket.on("turn_advanced", ({ currentTurnIndex, provinces: updatedProvinces }) => {
             // Aggiorna le province
-            Object.keys(updatedProvinces).forEach(id => {
-                if (provinces[id]) {
-                    provinces[id] = { ...provinces[id], ...updatedProvinces[id] };
-                }
-            });
-            console.log("Turno avanzato, province aggiornate");
-        });
+            //Object.keys(updatedProvinces).forEach(id => {
+                //if (provinces[id]) {
+                    //provinces[id] = { ...provinces[id], ...updatedProvinces[id] };
+                //}
+           // });
+            //console.log("Turno avanzato, province aggiornate");
+        //});
     </script>
 </body>
 

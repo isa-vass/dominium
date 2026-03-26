@@ -177,8 +177,20 @@ socket.on("turn_order_tie", ({ tiedPlayerIds, tiedNames }) => {
 
 // Ordine finale deciso
 socket.on("turn_order_decided", ({ turnOrder, playerContinents }) => {
-    // Aggiorna il nome del player nel panel
+
+    console.log("[turn_order_decided] playerContinents full:", playerContinents);
+    const myContinent = playerContinents[socket.id];
+    console.log("[turn_order_decided] my continent:", myContinent);
+
+    if (!myContinent) {
+        console.warn("[turn_order_decided] continente mancante per socket:", socket.id);
+    }
+    // (opzionale) fallback:
+    const continentToShow = myContinent || "nessun continente";
+    document.getElementById("pp-continent").textContent = continentToShow;
+
     const myEntry = turnOrder.find(p => p.socketId === socket.id);
+    console.log("myEntry:", myEntry);
     if (myEntry) {
         document.getElementById("pp-name").textContent = myEntry.name;
         document.getElementById("pp-continent").textContent = myEntry.continent;
@@ -196,7 +208,7 @@ socket.on("turn_order_decided", ({ turnOrder, playerContinents }) => {
     turnOrder.forEach((player, index) => {
         const row = document.createElement("div");
         row.classList.add("dice-roll-row", "final");
-        const medals = ["🥇", "🥈", "🥉"];
+        const medals = ["🥇", "🥈", "🥉"]; //da levare / cambiare 
         const medal = medals[index] || `${index + 1}.`;
         const isMe = player.socketId === socket.id;
         row.innerHTML = `

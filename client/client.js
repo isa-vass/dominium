@@ -201,6 +201,7 @@ function confirmName(roomId) {
 
 function renderPlayers(players) {
     const list = document.getElementById("player-list");
+    if (!list) return;
     list.innerHTML = "";
     players.forEach(p => {
         const el = document.createElement("div");
@@ -224,6 +225,7 @@ function renderPlayers(players) {
 let countdownInterval = null;
 function startCountdown(seconds, type = "normal") {
     const bar = document.getElementById("countdown-bar");
+    if (!bar) return;
     const number = document.getElementById("countdown-number");
     const fill = document.getElementById("countdown-fill");
     const text = document.getElementById("countdown-text");
@@ -248,8 +250,10 @@ function startCountdown(seconds, type = "normal") {
 }
 
 function stopCountdown() {
+    const bar = document.getElementById("countdown-bar");
+    if (!bar) return; // ← aggiunta
     clearInterval(countdownInterval);
-    document.getElementById("countdown-bar").classList.remove("visible");
+    bar.classList.remove("visible");
 }
 
 let hasSelectedContinent = false;

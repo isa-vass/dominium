@@ -5,11 +5,9 @@ const path = require("path");
 const session = require("express-session");
 const cookieParser = require("cookie-parser");
 const authRouter = require("./auth");
-
 const app = express();
 const httpServer = createServer(app);
 const io = new Server(httpServer, {});
-
 const rooms = new Map();
 const deleteTimers = new Map();
 
@@ -22,11 +20,11 @@ const sessionMiddleware = session({
 
 app.use(cookieParser());
 app.use(express.json());
-app.use(sessionMiddleware);         // ← deve stare PRIMA di authRouter
+app.use(sessionMiddleware);         
 io.engine.use(sessionMiddleware);
 
 app.use(express.static(path.join(__dirname, "../client")));
-app.use("/auth", authRouter);       // ← dopo sessionMiddleware
+app.use("/auth", authRouter);       
 
 app.get("/", (req, res) => {
     res.sendFile(path.join(__dirname, "../client/login.html"));
