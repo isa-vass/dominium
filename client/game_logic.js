@@ -11,6 +11,48 @@ const modalDesc = document.getElementById("modal-desc");
 
 let myRoll = null; // Variabile per memorizzare il roll del giocatore
 
+let turnCounter = 1;
+
+const players = new Map();
+
+const continentColors = {
+    'Divine Empire of Agartha': '#a7c957',
+    'Duchy of Garganta': '#cbeef3',
+    'Kingdom of Fimia': '#ef233c',
+    'Union of Arstotzka': '#ffb3c6'
+};
+
+// Tu stesso, subito
+players.set(socket.id, {
+    name: sessionStorage.getItem("playerName") || "Giocatore",
+    continent: sessionStorage.getItem("playerContinent") || "Nessun Continente",
+    troops: 0,
+    roll: null,
+    ready: false
+});
+
+let provinces = {};
+
+socket.on("provinces_data", (data) => {
+    provinces = data;
+    // ora puoi inizializzare i listener delle province
+    initProvinceListeners();
+});
+
+
+// Gli altri, quando arriva l'evento dal server
+socket.on("players_updated", ({ players: serverPlayers }) => {
+    serverPlayers.forEach(p => {
+        players.set(p.id, {
+            name: p.name,
+            continent: p.continent || null,
+            troops: p.troops || 0,
+            roll: null,
+            ready: p.ready
+        });
+    });
+});
+
 console.log("game_logic.js loaded, btnRoll:", btnRoll, "socket:", socket);
 
 function showModal() {
@@ -176,11 +218,14 @@ socket.on("turn_order_tie", ({ tiedPlayerIds, tiedNames }) => {
 });
 
 // Ordine finale deciso
-socket.on("turn_order_decided", ({ turnOrder, playerContinents,}) => {
+socket.on("turn_order_decided", ({ turnOrder, playerContinents, playerTroops }) => {
 
     console.log("[turn_order_decided] playerContinents full:", playerContinents);
     const myContinent = playerContinents[socket.id];
     console.log("[turn_order_decided] my continent:", myContinent);
+
+    const myTroops = playerTroops[socket.id];
+    console.log("[turn_order_decided] my troops:", myTroops);
 
     if (!myContinent) {
         console.warn("[turn_order_decided] continente mancante per socket:", socket.id);
@@ -247,6 +292,36 @@ socket.on("turn_order_decided", ({ turnOrder, playerContinents,}) => {
     }
 });
 
+let currentPlayer = null;
+
+socket.on("turn", ({ currentPlayerId, turnOrder }) => {
+    currentPlayer = currentPlayerId;
+    const isMyTurn = currentPlayerId === socket.id;
+
+    // Aggiorna UI
+    document.querySelectorAll(".player-item").forEach(item => {
+        const nameEl = item.querySelector(".player-name");
+        if (!nameEl) return;
+        const playerName = nameEl.textContent.replace(" (tu)", "");
+        const isActive = playerName === turnOrder.find(p => p.socketId === currentPlayerId)?.name;
+        item.classList.toggle("active-turn", isActive);
+    });
+
+    // Abilita/disabilita controlli in base al turno
+    if (isMyTurn) {
+        console.log("È il tuo turno!");
+        enableGameControls();
+    } else {
+        console.log("Turno di:", turnOrder.find(p => p.socketId === currentPlayerId)?.name);
+        disableGameControls();
+    }
+});
+
+// Quando il giocatore finisce il suo turno
+document.getElementById("btn-end-turn").addEventListener("click", () => {
+    socket.emit("end_turn", { roomId });
+});
+
 function startGame(turnOrder) {
     console.log("Gioco iniziato, ordine turni:", turnOrder);
     gameHasStarted = true;
@@ -272,3 +347,46 @@ socket.on("battle_result", ({ winner }) => {
         console.log("Il difensore ha resistito!");
     }
 });
+
+function initProvinceListeners() {
+    Object.keys(provinces).forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.addEventListener('click', () => handleProvinceClick(id));
+    });
+}
+
+function initMap() {
+    Object.keys(provinces).forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+
+        // Tooltip
+        el.addEventListener('mouseenter', () => {
+            const d = provinces[id];
+            const col = continentColors[d.continent] || '#fff';
+            tooltip.innerHTML = `
+                <div class="t-name">${d.name}</div>
+                <div class="t-state" style="color:${col}">${d.continent}</div>
+                <div class="t-row"><span class="t-label">Owner</span><span class="t-val">${d.owner || '—'}</span></div>
+                <div class="t-row"><span class="t-label">Troops</span><span class="t-val">${d.troops || 0}</span></div>
+            `;
+            tooltip.style.display = 'block';
+        });
+
+        el.addEventListener('mousemove', e => {
+            tooltip.style.left = (e.clientX + 18) + 'px';
+            tooltip.style.top = (e.clientY + 18) + 'px';
+            const r = tooltip.getBoundingClientRect();
+            if (r.right > window.innerWidth) tooltip.style.left = (e.clientX - r.width - 10) + 'px';
+            if (r.bottom > window.innerHeight) tooltip.style.top = (e.clientY - r.height - 10) + 'px';
+        });
+
+        el.addEventListener('mouseleave', () => {
+            tooltip.style.display = 'none';
+        });
+
+        // Click
+        el.addEventListener('click', () => handleProvinceClick(id));
+    });
+}

@@ -4,6 +4,7 @@ const { Server } = require("socket.io");
 const path = require("path");
 const session = require("express-session");
 const cookieParser = require("cookie-parser");
+const provinces = require("./provinces");
 const authRouter = require("./auth");
 const app = express();
 const httpServer = createServer(app);
@@ -90,6 +91,8 @@ function debugRooms(msg) {
 
 io.on("connection", (socket) => {
     socket.emit("welcome", "Welcome to Dominium!");
+
+    socket.emit("provinces_data", provinces);
 
     socket.on("set_name", (name) => {
         if (!name || typeof name !== "string") return;
@@ -445,7 +448,11 @@ io.on("connection", (socket) => {
             io.to(effectiveRoomId).emit("turn_order_decided", {
                 turnOrder,
                 playerContinents: Object.fromEntries(room.selectedContinents),
+                playerTroops: Object.fromEntries(room.selectedTroops)
             });
+
+            room.provinces = {};
+            room.placementDone = new Set();
         }
     });
 
@@ -455,6 +462,20 @@ io.on("connection", (socket) => {
         // Ritorna true se i turni sono già stati decisi
         const isDecided = !!room.turnOrder && room.turnOrder.length > 0;
         socket.emit("turn_order_status", { isDecided, turnOrder: room.turnOrder || [] });
+    });
+
+    socket.on("end_turn", ({ roomId }) => {
+        const room = rooms.get(roomId);
+        if (!room) return;
+        if (room.turnOrder[room.currentTurnIndex] !== socket.id) return; // non è il tuo turno
+
+        room.currentTurnIndex = (room.currentTurnIndex + 1) % room.turnOrder.length;
+        const nextPlayerId = room.turnOrder[room.currentTurnIndex];
+
+        io.to(roomId).emit("turn", {
+            currentPlayerId: nextPlayerId,
+            turnOrder: room.turnOrder
+        });
     });
 });
 
