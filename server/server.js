@@ -1,3 +1,6 @@
+process.on('uncaughtException', (e) => console.error('UNCAUGHT:', e));
+process.on('unhandledRejection', (e) => console.error('UNHANDLED:', e));
+
 const express = require("express");
 const { createServer } = require("http");
 const { Server } = require("socket.io");
@@ -157,6 +160,11 @@ io.on("connection", (socket) => {
 
         room.players.push(socket.id);
         socket.join(roomId);
+        const savedContinent = socket.request.session.selectedContinent;
+        if (savedContinent && room.gameStarted) {
+            const playerName = socket.request.session.userName;
+            room.selectedContinents.set(savedContinent, playerName);
+        }
         socket.request.session.roomId = roomId;
 
         socket.request.session.save((err) => {
@@ -220,7 +228,8 @@ io.on("connection", (socket) => {
 
         if (!room.readyPlayers) room.readyPlayers = new Set();
 
-        if (ready && !Array.from(room.selectedContinents.values()).includes(socket.id)) {
+        const readyName = socket.request.session.userName;
+        if (ready && !Array.from(room.selectedContinents.values()).includes(readyName)) {
             socket.emit("error", { message: "Devi selezionare un continente prima di metterti pronto" });
             return;
         }
@@ -248,6 +257,8 @@ io.on("connection", (socket) => {
             room.gameCountdown = setTimeout(() => {
                 // Alla fine del countdown, avvia il gioco
                 io.to(roomId).emit("game_start");
+                room.isRollingForTroops = true;
+                room.gameStarted = true;
                 room.gameCountdown = null;
             }, 3000);
         }
@@ -257,28 +268,35 @@ io.on("connection", (socket) => {
         const room = rooms.get(roomId);
         if (!room) return;
 
+        const playerName = socket.request.session.userName;
+        console.log("[select_continent] playerName:", playerName, "continent:", continent);
+
         // Rimuovi selezione precedente di questo giocatore
-        for (const [cont, playerId] of room.selectedContinents) {
-            if (playerId === socket.id) {
+        for (const [cont, name] of room.selectedContinents) {
+            if (name === playerName) {
                 room.selectedContinents.delete(cont);
             }
         }
 
-        // Se il continente non è già selezionato da qualcun altro, selezionalo
         if (!room.selectedContinents.has(continent)) {
-            room.selectedContinents.set(continent, socket.id);
+            room.selectedContinents.set(continent, playerName);
         }
 
-        // Notifica tutti i giocatori nella stanza con il loro rispettivo ID
+        socket.request.session.selectedContinent = continent;
+        socket.request.session.save();
+
+        // Notifica tutti
         room.players.forEach(playerId => {
             const playerSocket = io.sockets.sockets.get(playerId);
             if (playerSocket) {
-                playerSocket.emit("continents_updated", { 
+                const currentName = playerSocket.request.session.userName;
+                playerSocket.emit("continents_updated", {
                     selectedContinents: Object.fromEntries(room.selectedContinents),
-                    currentPlayerId: playerId
+                    currentPlayerName: currentName
                 });
             }
         });
+        console.log("[select_continent] dopo set:", Object.fromEntries(room.selectedContinents));
     });
 
     socket.on("edit_room_name", (roomName, roomId) => {
@@ -302,10 +320,12 @@ io.on("connection", (socket) => {
             io.to(roomId).emit("countdown_stop");
         }
 
-        // Rimuovi selezioni continenti del giocatore
-        for (const [continent, playerId] of room.selectedContinents) {
-            if (playerId === socket.id) {
-                room.selectedContinents.delete(continent);
+        if (!room.gameStarted) {
+            const leavingName = socket.request.session.userName;
+            for (const [continent, name] of room.selectedContinents) {
+                if (name === leavingName) {
+                    room.selectedContinents.delete(continent);
+                }
             }
         }
 
@@ -399,60 +419,189 @@ io.on("connection", (socket) => {
         socket.request.session.save(() => {});
 
         if (!room.turnOrderRolls) room.turnOrderRolls = {};
-        if (room.turnOrderRolls[socket.id]) return;
+
+        // ── FIX 1: Ignora roll doppi solo se non è un pareggio in corso ──
+        // Se il socket ha già tirato E non fa parte dei tiedPlayers attuali, ignora
+        if (room.turnOrderRolls[socket.id]) {
+            const isTied = room.tiedPlayers && room.tiedPlayers.includes(socket.id);
+            if (!isTied) return;
+        }
 
         const roll = Math.floor(Math.random() * 6) + 1;
         room.turnOrderRolls[socket.id] = roll;
 
-        const playerName = io.sockets.sockets.get(socket.id)?.request?.session?.userName || socket.id;
+        const playerName = socket.request.session.userName || socket.id;
         io.to(effectiveRoomId).emit("player_rolled", { socketId: socket.id, name: playerName, roll });
 
-        const totalPlayers = room.players.length;
-        const totalRolled = Object.keys(room.turnOrderRolls).length; //conta quantio giocatori hanno già tirato 
+        // ── FIX 2: Usa tiedPlayers per sapere quanti devono tirare ──
+        // Se c'è un pareggio in corso, aspetta solo i pareggiati; altrimenti tutti i giocatori
+        const expectedPlayers = room.tiedPlayers || room.players;
+        const totalPlayers = expectedPlayers.length;
+        const totalRolled = expectedPlayers.filter(id => room.turnOrderRolls[id] !== undefined).length;
 
         if (totalRolled === totalPlayers) {
-            // Ordina per dado decrescente, in caso di parità ri-tira
-            const sorted = Object.entries(room.turnOrderRolls)
-                .sort(([, a], [, b]) => b - a);
+            try{
+                if (room.isRollingForTroops) {
+                    const allRolls = { ...(room.previousRolls || {}), ...room.turnOrderRolls };
+                    const sorted = Object.entries(allRolls).sort(([, a], [, b]) => b - a);
 
-            // Gestisci i pareggi: i giocatori con lo stesso valore tirano di nuovo
-            const topScore = sorted[0][1];
-            const tied = sorted.filter(([, v]) => v === topScore);
+                    console.log("[allRolls]", allRolls);
+                    console.log("[sorted]", sorted);
 
-            if (tied.length > 1) {
-                // Reset solo per i pareggiati
-                tied.forEach(([id]) => delete room.turnOrderRolls[id]);
-                const tiedNames = tied.map(([id]) =>
-                    io.sockets.sockets.get(id)?.request?.session?.userName || id
-                );
-                io.to(effectiveRoomId).emit("turn_order_tie", {
-                    tiedPlayerIds: tied.map(([id]) => id),
-                    tiedNames
+                    // Trova il PRIMO gruppo con pareggio, scorrendo dall'alto
+                    const scores = sorted.map(([, v]) => v);
+                    const tiedScore = scores.find((score, i) => scores.indexOf(score) !== i);
+                    // tiedScore è il primo valore duplicato, es. con [3,2,1,1] → 1
+
+                    if (tiedScore !== undefined) {
+                        const tied = sorted.filter(([, v]) => v === tiedScore);
+                        const notTied = sorted.filter(([, v]) => v !== tiedScore);
+
+                        console.log("[pareggio rilevato] score:", tiedScore, "tiedPlayers:", tied.map(([id]) => id));
+
+                        // Salva i non-pareggiati come già risolti
+                        room.previousRolls = Object.fromEntries(notTied);
+                        room.tiedPlayers = tied.map(([id]) => id);
+                        room.turnOrderRolls = {};
+
+                        const tiedNames = room.tiedPlayers.map(id =>
+                            io.sockets.sockets.get(id)?.request?.session?.userName || id
+                        );
+                        io.to(effectiveRoomId).emit("turn_order_tie", {
+                            tiedPlayerIds: room.tiedPlayers,
+                            tiedNames
+                        });
+                        return;
+                    }
+
+                    // Nessun pareggio — ordine definitivo
+                    console.log("[nessun pareggio] procedo con finalSorted");
+
+                    const turnOrder = sorted.map(([id, roll]) => {
+                        const name = io.sockets.sockets.get(id)?.request?.session?.userName || id;
+                        const continent = Array.from(room.selectedContinents.entries())
+                            .find(([, n]) => n === name)?.[0] || "";
+                        return { socketId: id, name, continent, roll, troops: 0 };
+                    });
+
+                    turnOrder.forEach(player => {
+                        player.troops = troopAssignment(player.roll, 0);
+                    });
+
+                    room.turnOrder = turnOrder.map(p => p.socketId);
+                    room.turnOrderDetails = turnOrder;
+                    room.currentTurnIndex = 0;
+                    room.turnCount = 0;
+                    room.isRollingForTroops = false;
+                    room.turnOrderRolls = {};
+                    room.tiedPlayers = null;
+                    room.previousRolls = null;
+
+                    console.log("[debug] selectedContinents:", Object.fromEntries(room.selectedContinents));
+                    console.log("[debug] turnOrder:", turnOrder);
+
+                    io.to(effectiveRoomId).emit("turn_order_decided", {
+                        turnOrder,
+                        playerContinents: Object.fromEntries(room.selectedContinents),
+                    });
+
+                    console.log("[turn_order_decided] selectedContinents:", Object.fromEntries(room.selectedContinents));
+                    console.log("[turn_order_decided] players:", room.players);
+
+                    room.placementDone = new Set();
+                    room.provinces = {};
+                    room.turnOrderDetails.forEach(player => {
+                        const playerSocket = io.sockets.sockets.get(player.socketId);
+                        if (playerSocket) {
+                            playerSocket.emit("placement_start", { troops: player.troops });
+                        }
+                    });
+                }
+            }   
+            catch(e) {
+                console.error("[roll_for_turn_order] Errore durante la decisione dell'ordine di turno:", e);
+            }   
+        }     
+    });
+
+    socket.on("place_troop", ({ provinceId, roomId }) => {
+        const room = rooms.get(roomId);
+        if (!room) return;
+
+        const player = room.turnOrderDetails.find(p => p.socketId === socket.id);
+        if (!player) return;
+
+        const province = provinces[provinceId];
+        if (!province || province.continent !== player.continent) {
+            socket.emit("error", { message: "Non puoi piazzare truppe qui" });
+            return;
+        }
+
+        if (player.troops <= 0) return;
+
+        if (!room.provinces[provinceId]) {
+            room.provinces[provinceId] = { troops: 0, owner: null };
+        }
+        room.provinces[provinceId].troops++;
+        room.provinces[provinceId].owner = socket.id;
+        player.troops--;
+
+        io.to(roomId).emit("province_updated", {
+            provinceId,
+            troops: room.provinces[provinceId].troops,
+            ownerName: player.name,
+        });
+
+        socket.emit("troops_remaining", { troopsToPlaceLeft: player.troops });
+
+        if (player.troops <= 0) {
+            const continentProvinces = Object.entries(provinces)
+                .filter(([, p]) => p.continent === player.continent)
+                .map(([id]) => id);
+
+            const allCovered = continentProvinces.every(id =>
+                room.provinces[id] && room.provinces[id].troops >= 1
+            );
+
+            if (!allCovered) {
+                // Azzera le province del suo continente
+                const continentProvinces = Object.entries(provinces)
+                    .filter(([, p]) => p.continent === player.continent)
+                    .map(([id]) => id);
+
+                let refund = 0;
+                continentProvinces.forEach(id => {
+                    if (room.provinces[id]) {
+                        refund += room.provinces[id].troops;
+                        room.provinces[id].troops = 0;
+                        room.provinces[id].owner = null;
+                        // Notifica tutti del reset
+                        io.to(roomId).emit("province_updated", {
+                            provinceId: id,
+                            troops: 0,
+                            ownerName: null
+                        });
+                    }
                 });
+
+                player.troops = refund;
+                socket.emit("troops_remaining", { troopsToPlaceLeft: player.troops });
+                socket.emit("error", { message: "Devi piazzare almeno una truppa in ogni provincia" });
                 return;
             }
 
-            // Ordine finale
-            const turnOrder = sorted.map(([id, roll]) => {
-                const name = io.sockets.sockets.get(id)?.request?.session?.userName || id;
-                const continent = Array.from(room.selectedContinents.entries())
-                    .find(([, socketId]) => socketId === id)?.[0] || "";
-                return { socketId: id, name, continent, troops: troopAssignment(roll, 0) }; // valido solo per il primo turno, poi bisogna passare le truppe reali del giocatore invece di 0
-            });
-
-            room.turnOrder = turnOrder.map(p => p.socketId);
-            room.currentTurnIndex = 0;
-            room.turnOrderRolls = {}; // pulizia
-
-            //emissione 
-            io.to(effectiveRoomId).emit("turn_order_decided", {
-                turnOrder,
-                playerContinents: Object.fromEntries(room.selectedContinents),
-                playerTroops: Object.fromEntries(room.selectedTroops)
-            });
-
-            room.provinces = {};
-            room.placementDone = new Set();
+            room.placementDone.add(socket.id);
+            console.log("[place_troop] placementDone size:", room.placementDone.size, 
+                "placementDone ids:", Array.from(room.placementDone),
+                "turnOrderDetails length:", room.turnOrderDetails.length,
+                "turnOrderDetails ids:", room.turnOrderDetails.map(p => p.socketId));
+            if (room.placementDone.size === room.turnOrderDetails.length) {
+                io.to(roomId).emit("placement_complete");
+                io.to(roomId).emit("turn", {
+                    currentPlayerId: room.turnOrder[0],
+                    turnOrder: room.turnOrderDetails
+                });
+            }
         }
     });
 
@@ -467,14 +616,24 @@ io.on("connection", (socket) => {
     socket.on("end_turn", ({ roomId }) => {
         const room = rooms.get(roomId);
         if (!room) return;
-        if (room.turnOrder[room.currentTurnIndex] !== socket.id) return; // non è il tuo turno
+        if (room.turnOrder[room.currentTurnIndex] !== socket.id) return;
 
         room.currentTurnIndex = (room.currentTurnIndex + 1) % room.turnOrder.length;
-        const nextPlayerId = room.turnOrder[room.currentTurnIndex];
+
+        if (room.currentTurnIndex === 0) {
+            room.turnCount++;
+            if (room.turnCount % 3 === 0) {
+                room.placementDone = new Set();
+                room.turnOrderRolls = {};
+                room.isRollingForTroops = true;
+                io.to(roomId).emit("troop_roll_start");
+                return;
+            }
+        }
 
         io.to(roomId).emit("turn", {
-            currentPlayerId: nextPlayerId,
-            turnOrder: room.turnOrder
+            currentPlayerId: room.turnOrder[room.currentTurnIndex],
+            turnOrder: room.turnOrderDetails
         });
     });
 });
@@ -499,7 +658,7 @@ function clearDeleteTimer(roomId) {
     const t = deleteTimers.get(roomId);
     if (t) {
         clearTimeout(t);
-        deleteTimers.delete(roomId);
+        deleteTimers.delete(t);
         debugRooms(`clearDeleteTimer ${roomId}`);
     }
 }

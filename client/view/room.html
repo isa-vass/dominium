@@ -141,7 +141,7 @@
         });
 
         socket.on("players_updated", ({ players }) => renderPlayers(players));
-        socket.on("continents_updated", ({ selectedContinents, currentPlayerId }) => updateContinents(selectedContinents, currentPlayerId));
+        socket.on("continents_updated", ({ selectedContinents, currentPlayerName }) => updateContinents(selectedContinents, currentPlayerName));
         socket.on("countdown_start", ({ seconds }) => startCountdown(seconds, "normal"));
         socket.on("game_countdown_start", ({ seconds }) => startCountdown(seconds, "game"));
         socket.on("countdown_stop", () => stopCountdown());

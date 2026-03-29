@@ -8,6 +8,12 @@ const myRollValue = document.getElementById("my-roll-value");
 const diceRollsList = document.getElementById("dice-rolls-list");
 const modalTitle = document.getElementById("modal-title");
 const modalDesc = document.getElementById("modal-desc");
+const placementBanner = document.getElementById("placement-banner");
+const troopsToPlaceEl = document.getElementById("troops-to-place");
+const tooltip = document.getElementById('tooltip');
+let troopsToPlace = 0;
+let placementPhase = false;
+let pendingTroops = null;
 
 let myRoll = null; // Variabile per memorizzare il roll del giocatore
 
@@ -36,7 +42,7 @@ let provinces = {};
 socket.on("provinces_data", (data) => {
     provinces = data;
     // ora puoi inizializzare i listener delle province
-    initProvinceListeners();
+    initMap();
 });
 
 
@@ -218,14 +224,11 @@ socket.on("turn_order_tie", ({ tiedPlayerIds, tiedNames }) => {
 });
 
 // Ordine finale deciso
-socket.on("turn_order_decided", ({ turnOrder, playerContinents, playerTroops }) => {
+socket.on("turn_order_decided", ({ turnOrder, playerContinents}) => {
 
     console.log("[turn_order_decided] playerContinents full:", playerContinents);
     const myContinent = playerContinents[socket.id];
     console.log("[turn_order_decided] my continent:", myContinent);
-
-    const myTroops = playerTroops[socket.id];
-    console.log("[turn_order_decided] my troops:", myTroops);
 
     if (!myContinent) {
         console.warn("[turn_order_decided] continente mancante per socket:", socket.id);
@@ -325,9 +328,15 @@ document.getElementById("btn-end-turn").addEventListener("click", () => {
 function startGame(turnOrder) {
     console.log("Gioco iniziato, ordine turni:", turnOrder);
     gameHasStarted = true;
-    sessionStorage.setItem("gameStarted", "true"); // Salva lo stato persistentemente
+    sessionStorage.setItem("gameStarted", "true");
     hideModal();
-    // Attiva la visualizzazione mappa/stato del gioco già caricati
+
+    // Applica placement_start bufferizzato
+    if (pendingTroops !== null) {
+        console.log("[startGame] applico pendingTroops:", pendingTroops);
+        applyPlacementStart(pendingTroops);
+        pendingTroops = null;
+    }
 }
 
 
@@ -348,13 +357,6 @@ socket.on("battle_result", ({ winner }) => {
     }
 });
 
-function initProvinceListeners() {
-    Object.keys(provinces).forEach(id => {
-        const el = document.getElementById(id);
-        if (!el) return;
-        el.addEventListener('click', () => handleProvinceClick(id));
-    });
-}
 
 function initMap() {
     Object.keys(provinces).forEach(id => {
@@ -390,3 +392,124 @@ function initMap() {
         el.addEventListener('click', () => handleProvinceClick(id));
     });
 }
+
+socket.on("placement_start", ({ troops }) => {
+    console.log("[placement_start] ricevuto, troops:", troops, "overlay display:", overlay.style.display);
+    // Se il modal è ancora aperto (countdown in corso), bufferizza
+    if (overlay.style.display !== "none") {
+        console.log("[placement_start] modal ancora aperto, bufferizzato");
+        pendingTroops = troops;
+        return;
+    }
+    applyPlacementStart(troops);
+});
+
+function applyPlacementStart(troops) {
+    console.log("[applyPlacementStart] troops:", troops);
+    placementPhase = true;
+    troopsToPlace = troops;
+    troopsToPlaceEl.textContent = troopsToPlace;
+    placementBanner.style.display = "block";
+}
+
+function handleProvinceClick(provinceId) {
+    if (!placementPhase) return;
+    const province = provinces[provinceId];
+    const myContinent = sessionStorage.getItem("playerContinent");
+    if (province.continent !== myContinent) return;
+    if (troopsToPlace <= 0) return;
+    socket.emit("place_troop", { provinceId, roomId: getRoomId() });
+}
+
+socket.on("province_updated", ({ provinceId, troops, ownerName }) => {
+    provinces[provinceId].troops = troops;
+    provinces[provinceId].owner = ownerName;
+
+    updateTroopMarker(provinceId, troops, ownerName);
+});
+
+socket.on("troops_remaining", ({ troopsToPlaceLeft }) => {
+    troopsToPlace = troopsToPlaceLeft;
+    troopsToPlaceEl.textContent = troopsToPlace;
+    if (troopsToPlace <= 0) {
+        placementBanner.style.display = "none";
+    }
+});
+
+function updateTroopMarker(provinceId, troops, ownerName) {
+    const svgEl = document.querySelector("svg");
+    const provinceEl = document.getElementById(provinceId);
+    if (!provinceEl || !svgEl) return;
+
+    // Calcola il centro approssimativo della provincia dal bounding box
+    const bbox = provinceEl.getBBox();
+    const cx = bbox.x + bbox.width / 2;
+    const cy = bbox.y + bbox.height / 2;
+
+    const markerId = `troop-marker-${provinceId}`;
+    let marker = document.getElementById(markerId);
+
+    if (!marker) {
+        // Crea il gruppo marker
+        marker = document.createElementNS("http://www.w3.org/2000/svg", "g");
+        marker.id = markerId;
+
+        const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+        circle.setAttribute("r", "18");
+        circle.setAttribute("fill", "rgba(10,10,10,0.75)");
+        circle.setAttribute("stroke", "#ff4444");
+        circle.setAttribute("stroke-width", "2");
+
+        const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+        text.setAttribute("text-anchor", "middle");
+        text.setAttribute("dominant-baseline", "central");
+        text.setAttribute("fill", "#ffffff");
+        text.setAttribute("font-size", "16");
+        text.setAttribute("font-family", "Cinzel, Georgia, serif");
+        text.setAttribute("font-weight", "bold");
+        text.setAttribute("pointer-events", "none");
+
+        marker.appendChild(circle);
+        marker.appendChild(text);
+        svgEl.appendChild(marker);
+    }
+
+    marker.setAttribute("transform", `translate(${cx}, ${cy})`);
+    marker.querySelector("text").textContent = troops;
+    marker.style.display = troops > 0 ? "block" : "none";
+}
+
+function showPlacementError(message) {
+    const el = document.getElementById("placement-error");
+    el.textContent = message;
+    el.style.display = "block";
+    clearTimeout(showPlacementError._timer);
+    showPlacementError._timer = setTimeout(() => {
+        el.style.display = "none";
+    }, 3000);
+}
+
+
+socket.on("error", ({ message }) => {
+    if (placementPhase) {
+        showPlacementError(message);
+    } else {
+        modalDesc.textContent = message;
+    }
+});
+
+socket.on("placement_complete", () => {
+    placementPhase = false;
+});
+
+socket.on("troop_roll_start", () => {
+    modalTitle.textContent = "Tira per le Truppe!";
+    modalDesc.textContent = "Tira il dado per ricevere nuove truppe!";
+    diceRollsList.innerHTML = "";
+    diceResultDisplay.style.display = "none";
+    waitingMsg.style.display = "none";
+    btnRoll.disabled = false;
+    btnRoll.textContent = "Tira il Dado";
+    btnRoll.style.display = "block";
+    showModal();
+});

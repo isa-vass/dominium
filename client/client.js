@@ -1,5 +1,12 @@
 const socket = io();
 
+const continentMap = {
+    'agartha': 'Divine Empire of Agartha',
+    'garganta': 'Duchy of Garganta',
+    'fimia': 'Kingdom of Fimia',
+    'arstotzka': 'Union of Arstotzka'
+};
+
 // --- LEGGI SESSIONE PHP E IMPOSTA IL NOME SU NODE.JS ---
 async function initSessionFromPHP() {
     try {
@@ -98,8 +105,23 @@ socket.on("room_joined", ({ roomId, roomCode }) => {
     window.location.href = `/view/room.html?id=${roomId}`;
 });
 
+function showGlobalError(message) {
+    let el = document.getElementById("global-error");
+    if (!el) {
+        el = document.createElement("div");
+        el.id = "global-error";
+        document.body.appendChild(el);
+    }
+    el.textContent = message;
+    el.style.display = "block";
+    clearTimeout(showGlobalError._timer);
+    showGlobalError._timer = setTimeout(() => {
+        el.style.display = "none";
+    }, 3000);
+}
+
 socket.on("error", ({ message }) => {
-    alert(message);
+    showGlobalError(message);
 });
 
 socket.on("connect", () => {
@@ -157,7 +179,7 @@ function initRoom(roomId) {
             if (btn.classList.contains("locked")) return;
             document.querySelectorAll(".continent-btn").forEach(b => b.classList.remove("selected"));
             btn.classList.add("selected");
-            const continent = btn.dataset.continent;
+            const continent = continentMap[btn.dataset.continent];
             sessionStorage.setItem("playerContinent", continent);
             socket.emit("select_continent", { roomId, continent });
         });
@@ -257,20 +279,20 @@ function stopCountdown() {
 }
 
 let hasSelectedContinent = false;
-function updateContinents(selectedContinents, currentPlayerId) {
+function updateContinents(selectedContinents, currentPlayerName) {
     document.querySelectorAll(".continent-btn").forEach(btn => {
-        const continent = btn.dataset.continent;
+        const continent = continentMap[btn.dataset.continent];
         const selectedBy = selectedContinents[continent];
 
         btn.classList.remove("selected", "locked");
 
-        if (selectedBy === currentPlayerId) {
+        if (selectedBy === currentPlayerName) {
             btn.classList.add("selected");
         } else if (selectedBy) {
             btn.classList.add("locked");
         }
     });
-    hasSelectedContinent = Object.values(selectedContinents).includes(currentPlayerId);
+    hasSelectedContinent = Object.values(selectedContinents).includes(currentPlayerName);
 }
 
 // --- SOCKET EVENTS per room page ---
@@ -286,6 +308,6 @@ socket.on("countdown_stop", () => {
     if (typeof stopCountdown === "function") stopCountdown();
 });
 
-socket.on("continents_updated", ({ selectedContinents, currentPlayerId }) => {
-    if (typeof updateContinents === "function") updateContinents(selectedContinents, currentPlayerId);
+socket.on("continents_updated", ({ selectedContinents, currentPlayerName }) => {
+    if (typeof updateContinents === "function") updateContinents(selectedContinents, currentPlayerName);
 });
