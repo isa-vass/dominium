@@ -82,6 +82,8 @@ document.getElementById("pp-name").textContent = playerName;
 const playerContinent = sessionStorage.getItem("playerContinent");
 document.getElementById("pp-continent").textContent = playerContinent;
 
+applyPlayerColor(playerContinent);
+
 // Controlla se il gioco è già iniziato (persiste tra reload)
 const gameAlreadyStarted = sessionStorage.getItem("gameStarted") === "true";
 if (gameAlreadyStarted) {
@@ -94,6 +96,12 @@ if (gameAlreadyStarted) {
 // Rejoin room se necessario
 const roomIdFromUrl = new URLSearchParams(window.location.search).get("id");
 const roomId = roomIdFromUrl || sessionStorage.getItem("roomId");
+
+function applyPlayerColor(continent) {
+    const color = continentColors[continent] || '#ffffff';
+    document.getElementById("pp-name").style.color = color;
+    document.getElementById("pp-continent").style.color = color;
+}
 
 // Controlla lo stato dei turni al caricamento della pagina
 function checkGameState() {
@@ -224,7 +232,7 @@ socket.on("turn_order_tie", ({ tiedPlayerIds, tiedNames }) => {
 });
 
 // Ordine finale deciso
-socket.on("turn_order_decided", ({ turnOrder, playerContinents}) => {
+socket.on("turn_order_decided", ({ turnOrder, playerContinents }) => {
 
     console.log("[turn_order_decided] playerContinents full:", playerContinents);
     const myContinent = playerContinents[socket.id];
@@ -243,6 +251,9 @@ socket.on("turn_order_decided", ({ turnOrder, playerContinents}) => {
         document.getElementById("pp-name").textContent = myEntry.name;
         document.getElementById("pp-continent").textContent = myEntry.continent;
         document.getElementById("pp-troops").textContent = myEntry.troops;
+
+        applyPlayerColor(myEntry.continent);
+
         // Salva il continente in sessionStorage per uso successivo
         sessionStorage.setItem("playerContinent", myEntry.continent);
         sessionStorage.setItem("playerName", myEntry.name);
