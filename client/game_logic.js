@@ -283,7 +283,6 @@ socket.on("turn", ({ currentPlayerId, turnOrder }) => {
     currentPlayer = currentPlayerId;
     const isMyTurn = currentPlayerId === socket.id;
 
-    // Aggiorna UI
     document.querySelectorAll(".player-item").forEach(item => {
         const nameEl = item.querySelector(".player-name");
         if (!nameEl) return;
@@ -292,12 +291,24 @@ socket.on("turn", ({ currentPlayerId, turnOrder }) => {
         item.classList.toggle("active-turn", isActive);
     });
 
-    // Abilita/disabilita controlli in base al turno
+    const btnEnd = document.getElementById("btn-end-turn");
+    const banner = document.getElementById("turn-banner");
+
     if (isMyTurn) {
-        console.log("È il tuo turno!");
+        turnMessage(turnCounter, false, true);
+        btnEnd.style.display = "block";
         enableGameControls();
     } else {
-        console.log("Turno di:", turnOrder.find(p => p.socketId === currentPlayerId)?.name);
+        // NUOVO: mostra di chi è il turno
+        const currentName = turnOrder.find(p => p.socketId === currentPlayerId)?.name || "...";
+        banner.textContent = `⚔ TURNO DI ${currentName.toUpperCase()} ⚔`;
+        banner.style.display = "block";
+        banner.style.opacity = "1";
+        setTimeout(() => {
+            banner.style.opacity = "0";
+            setTimeout(() => { banner.style.display = "none"; }, 500);
+        }, 2500);
+        btnEnd.style.display = "none";
         disableGameControls();
     }
 });
@@ -306,7 +317,7 @@ socket.on("turn", ({ currentPlayerId, turnOrder }) => {
 document.getElementById("btn-end-turn").addEventListener("click", () => {
     socket.emit("end_turn", { roomId });
     turnCounter++;
-    turnMessage(turnCounter);
+    document.getElementById("btn-end-turn").style.display = "none";
 });
 
 
@@ -360,9 +371,24 @@ socket.on("error", ({ message }) => {
 
 socket.on("placement_complete", () => {
     placementPhase = false;
+    placementBanner.style.display = "none";
+    const banner = document.getElementById("turn-banner");
+    banner.style.opacity = "0";
+    setTimeout(() => { banner.style.display = "none"; }, 500);
 });
 
 socket.on("troop_roll_start", () => {
+    // Banner flash per tutti
+    const banner = document.getElementById("turn-banner");
+    banner.textContent = "⚔ NUOVO LANCIO TRUPPE ⚔";
+    banner.style.display = "block";
+    banner.style.opacity = "1";
+    setTimeout(() => {
+        banner.style.opacity = "0";
+        setTimeout(() => { banner.style.display = "none"; }, 500);
+    }, 2000);
+
+    // Modal dado — uguale per tutti, nessun pareggio
     modalTitle.textContent = "Tira per le Truppe!";
     modalDesc.textContent = "Tira il dado per ricevere nuove truppe!";
     diceRollsList.innerHTML = "";
@@ -376,24 +402,19 @@ socket.on("troop_roll_start", () => {
 
 
 // --- FUNZIONI DI GIOCO ---
-function turnMessage(turnCounter, placementPhase) {
+function turnMessage(turnCounter, isPlacement, isMyTurn = false) {
     const banner = document.getElementById("turn-banner");
-
-    // Ogni 12 turni (al turno 1, 13, 25...) mostra prima "TROOPS ASSIGNMENT TURN"
-    if (placementPhase) {
-        banner.textContent = "⚔ TROOPS ASSIGNMENT TURN ⚔";
-        banner.style.display = "block";
-        banner.style.opacity = "1";
-
-    } else {
-        banner.textContent = `TURN: ${turnCounter}`;
-        banner.style.display = "block";
-        banner.style.opacity = "1";
-
+    banner.style.display = "block";
+    banner.style.opacity = "1";
+    if (isPlacement) {
+        banner.textContent = "⚔ PIAZZAMENTO TRUPPE ⚔";
+        // rimane visibile, non sparisce da solo
+    } else if (isMyTurn) {
+        banner.textContent = "⚔ È IL TUO TURNO ⚔";
         setTimeout(() => {
             banner.style.opacity = "0";
             setTimeout(() => { banner.style.display = "none"; }, 500);
-        }, 2000);
+        }, 2500);
     }
 }
 
@@ -432,7 +453,6 @@ function startGame(turnOrder) {
     gameHasStarted = true;
     sessionStorage.setItem("gameStarted", "true");
     hideModal();
-    turnMessage(turnCounter); 
 
     if (pendingTroops !== null) {
         applyPlacementStart(pendingTroops);
@@ -480,11 +500,11 @@ function initMap() {
 }
 
 function applyPlacementStart(troops) {
-    console.log("[applyPlacementStart] troops:", troops);
     placementPhase = true;
     troopsToPlace = troops;
     troopsToPlaceEl.textContent = troopsToPlace;
     placementBanner.style.display = "block";
+    turnMessage(turnCounter, true); // mostra "TROOPS ASSIGNMENT TURN" a tutti
 }
 
 function handleProvinceClick(provinceId) {

@@ -442,80 +442,98 @@ io.on("connection", (socket) => {
         if (totalRolled === totalPlayers) {
             try{
                 if (room.isRollingForTroops) {
-                    const allRolls = { ...(room.previousRolls || {}), ...room.turnOrderRolls };
+                    if (!room.previousRolls) room.previousRolls = {};
+
+                    // Determina se siamo in un "re-roll" per le truppe aggiuntive (dopo il primo ordine)
+                    const isTroopRefill = !!room.turnOrder && room.turnOrder.length > 0;
+
+                    const allRolls = { ...room.turnOrderRolls };
                     const sorted = Object.entries(allRolls).sort(([, a], [, b]) => b - a);
 
-                    console.log("[allRolls]", allRolls);
-                    console.log("[sorted]", sorted);
+                    if (!isTroopRefill) {
+                        // === PRIMO LANCIO: stabilisce ordine turni ===
+                        // Controlla pareggi
+                        const scores = sorted.map(([, v]) => v);
+                        const tiedScore = scores.find((score, i) => scores.indexOf(score) !== i);
 
-                    // Trova il PRIMO gruppo con pareggio, scorrendo dall'alto
-                    const scores = sorted.map(([, v]) => v);
-                    const tiedScore = scores.find((score, i) => scores.indexOf(score) !== i);
-                    // tiedScore è il primo valore duplicato, es. con [3,2,1,1] → 1
-
-                    if (tiedScore !== undefined) {
-                        const tied = sorted.filter(([, v]) => v === tiedScore);
-                        const notTied = sorted.filter(([, v]) => v !== tiedScore);
-
-                        console.log("[pareggio rilevato] score:", tiedScore, "tiedPlayers:", tied.map(([id]) => id));
-
-                        // Salva i non-pareggiati come già risolti
-                        room.previousRolls = Object.fromEntries(notTied);
-                        room.tiedPlayers = tied.map(([id]) => id);
-                        room.turnOrderRolls = {};
-
-                        const tiedNames = room.tiedPlayers.map(id =>
-                            io.sockets.sockets.get(id)?.request?.session?.userName || id
-                        );
-                        io.to(effectiveRoomId).emit("turn_order_tie", {
-                            tiedPlayerIds: room.tiedPlayers,
-                            tiedNames
-                        });
-                        return;
-                    }
-
-                    // Nessun pareggio — ordine definitivo
-                    console.log("[nessun pareggio] procedo con finalSorted");
-
-                    const turnOrder = sorted.map(([id, roll]) => {
-                        const name = io.sockets.sockets.get(id)?.request?.session?.userName || id;
-                        const continent = Array.from(room.selectedContinents.entries())
-                            .find(([, n]) => n === name)?.[0] || "";
-                        return { socketId: id, name, continent, roll, troops: 0 };
-                    });
-
-                    turnOrder.forEach(player => {
-                        player.troops = troopAssignment(player.roll, 0);
-                    });
-
-                    room.turnOrder = turnOrder.map(p => p.socketId);
-                    room.turnOrderDetails = turnOrder;
-                    room.currentTurnIndex = 0;
-                    room.turnCount = 0;
-                    room.isRollingForTroops = false;
-                    room.turnOrderRolls = {};
-                    room.tiedPlayers = null;
-                    room.previousRolls = null;
-
-                    console.log("[debug] selectedContinents:", Object.fromEntries(room.selectedContinents));
-                    console.log("[debug] turnOrder:", turnOrder);
-
-                    io.to(effectiveRoomId).emit("turn_order_decided", {
-                        turnOrder,
-                        playerContinents: Object.fromEntries(room.selectedContinents),
-                    });
-
-                    console.log("[turn_order_decided] selectedContinents:", Object.fromEntries(room.selectedContinents));
-                    console.log("[turn_order_decided] players:", room.players);
-
-                    room.placementDone = new Set();
-                    room.provinces = {};
-                    room.turnOrderDetails.forEach(player => {
-                        const playerSocket = io.sockets.sockets.get(player.socketId);
-                        if (playerSocket) {
-                            playerSocket.emit("placement_start", { troops: player.troops });
+                        if (tiedScore !== undefined) {
+                            const tied = sorted.filter(([, v]) => v === tiedScore);
+                            const notTied = sorted.filter(([, v]) => v !== tiedScore);
+                            room.previousRolls = Object.fromEntries(notTied);
+                            room.tiedPlayers = tied.map(([id]) => id);
+                            room.turnOrderRolls = {};
+                            const tiedNames = room.tiedPlayers.map(id =>
+                                io.sockets.sockets.get(id)?.request?.session?.userName || id
+                            );
+                            io.to(effectiveRoomId).emit("turn_order_tie", {
+                                tiedPlayerIds: room.tiedPlayers,
+                                tiedNames
+                            });
+                            return;
                         }
-                    });
+
+                        // Nessun pareggio — ordine definitivo
+                        const turnOrder = sorted.map(([id, roll]) => {
+                            const name = io.sockets.sockets.get(id)?.request?.session?.userName || id;
+                            const continent = Array.from(room.selectedContinents.entries())
+                                .find(([, n]) => n === name)?.[0] || "";
+                            return { socketId: id, name, continent, roll, troops: 0 };
+                        });
+
+                        turnOrder.forEach(player => {
+                            player.troops = troopAssignment(player.roll, 0);
+                        });
+
+                        room.turnOrder = turnOrder.map(p => p.socketId);
+                        room.turnOrderDetails = turnOrder;
+                        room.currentTurnIndex = 0;
+                        room.turnCount = 0;
+                        room.isRollingForTroops = false;
+                        room.turnOrderRolls = {};
+                        room.tiedPlayers = null;
+                        room.previousRolls = null;
+
+                        io.to(effectiveRoomId).emit("turn_order_decided", {
+                            turnOrder,
+                            playerContinents: Object.fromEntries(room.selectedContinents),
+                        });
+
+                        room.placementDone = new Set();
+                        room.provinces = {};
+                        room.turnOrderDetails.forEach(player => {
+                            const playerSocket = io.sockets.sockets.get(player.socketId);
+                            if (playerSocket) {
+                                playerSocket.emit("placement_start", { troops: player.troops });
+                            }
+                        });
+
+                    } else {
+                        // === LANCI SUCCESSIVI: solo aggiunta truppe, mantiene ordine esistente ===
+                        // Nessun pareggio, nessun riordino — assegna truppe e basta
+                        room.turnOrderDetails.forEach(player => {
+                            const roll = allRolls[player.socketId];
+                            if (roll !== undefined) {
+                                const newTroops = troopAssignment(roll, 0); // parte sempre da 0, aggiungi le nuove
+                                player.troops = (player.troops || 0) + newTroops;
+                                const playerSocket = io.sockets.sockets.get(player.socketId);
+                                if (playerSocket) {
+                                    playerSocket.emit("placement_start", { troops: newTroops }); // manda solo le nuove
+                                }
+                            }
+                        });
+
+                        room.isRollingForTroops = false;
+                        room.turnOrderRolls = {};
+                        room.tiedPlayers = null;
+                        room.previousRolls = null;
+                        room.placementDone = new Set();
+
+                        // Riprende dal turno corrente (non da 0)
+                        io.to(effectiveRoomId).emit("turn", {
+                            currentPlayerId: room.turnOrder[room.currentTurnIndex],
+                            turnOrder: room.turnOrderDetails
+                        });
+                    }
                 }
             }   
             catch(e) {
@@ -555,50 +573,43 @@ io.on("connection", (socket) => {
         socket.emit("troops_remaining", { troopsToPlaceLeft: player.troops });
 
         if (player.troops <= 0) {
-            const continentProvinces = Object.entries(provinces)
-                .filter(([, p]) => p.continent === player.continent)
-                .map(([id]) => id);
+            const isFirstPlacement = room.turnCount === 0;
 
-            const allCovered = continentProvinces.every(id =>
-                room.provinces[id] && room.provinces[id].troops >= 1
-            );
-
-            if (!allCovered) {
-                // Azzera le province del suo continente
+            if (isFirstPlacement) {
                 const continentProvinces = Object.entries(provinces)
                     .filter(([, p]) => p.continent === player.continent)
                     .map(([id]) => id);
 
-                let refund = 0;
-                continentProvinces.forEach(id => {
-                    if (room.provinces[id]) {
-                        refund += room.provinces[id].troops;
-                        room.provinces[id].troops = 0;
-                        room.provinces[id].owner = null;
-                        // Notifica tutti del reset
-                        io.to(roomId).emit("province_updated", {
-                            provinceId: id,
-                            troops: 0,
-                            ownerName: null
-                        });
-                    }
-                });
+                const allCovered = continentProvinces.every(id =>
+                    room.provinces[id] && room.provinces[id].troops >= 1
+                );
 
-                player.troops = refund;
-                socket.emit("troops_remaining", { troopsToPlaceLeft: player.troops });
-                socket.emit("error", { message: "Devi piazzare almeno una truppa in ogni provincia" });
-                return;
+                if (!allCovered) {
+                    // reset solo al primo piazzamento
+                    let refund = 0;
+                    continentProvinces.forEach(id => {
+                        if (room.provinces[id]) {
+                            refund += room.provinces[id].troops;
+                            room.provinces[id].troops = 0;
+                            room.provinces[id].owner = null;
+                            io.to(roomId).emit("province_updated", {
+                                provinceId: id, troops: 0, ownerName: null
+                            });
+                        }
+                    });
+                    player.troops = refund;
+                    socket.emit("troops_remaining", { troopsToPlaceLeft: player.troops });
+                    socket.emit("error", { message: "Devi piazzare almeno una truppa in ogni provincia" });
+                    return;
+                }
             }
 
             room.placementDone.add(socket.id);
-            console.log("[place_troop] placementDone size:", room.placementDone.size, 
-                "placementDone ids:", Array.from(room.placementDone),
-                "turnOrderDetails length:", room.turnOrderDetails.length,
-                "turnOrderDetails ids:", room.turnOrderDetails.map(p => p.socketId));
+            console.log("[place_troop] placementDone size:", room.placementDone.size);
             if (room.placementDone.size === room.turnOrderDetails.length) {
                 io.to(roomId).emit("placement_complete");
                 io.to(roomId).emit("turn", {
-                    currentPlayerId: room.turnOrder[0],
+                    currentPlayerId: room.turnOrder[room.currentTurnIndex],
                     turnOrder: room.turnOrderDetails
                 });
             }

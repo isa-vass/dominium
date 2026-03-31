@@ -1117,3 +1117,28 @@ body::before {
     pointer-events: none;
     transition: opacity 0.5s ease;
 }
+
+#btn-end-turn {
+    position: fixed;
+    bottom: 28px;
+    right: 28px;
+    z-index: 600;
+    display: none;
+    padding: 14px 28px;
+    background: linear-gradient(135deg, #8b0000 0%, #ff0000 50%, #8b0000 100%);
+    color: #ffffff;
+    border: 2px solid #ff4444;
+    border-radius: 8px;
+    font-family: 'Cinzel', Georgia, serif;
+    font-size: 0.9em;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    font-weight: bold;
+    cursor: pointer;
+    box-shadow: 0 4px 15px rgba(139,0,0,0.6);
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+#btn-end-turn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 25px rgba(255,0,0,0.8);
+}
