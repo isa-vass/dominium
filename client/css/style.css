@@ -1098,3 +1098,22 @@ body::before {
     z-index: 9999;
     display: none;
 }
+
+#turn-banner {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(10, 10, 10, 0.85);
+    color: #fff;
+    font-family: Cinzel, Georgia, serif;
+    font-size: 2rem;
+    font-weight: bold;
+    padding: 24px 48px;
+    border: 2px solid #a0a0a0;
+    border-radius: 8px;
+    text-align: center;
+    z-index: 9999;
+    pointer-events: none;
+    transition: opacity 0.5s ease;
+}

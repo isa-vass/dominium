@@ -19,6 +19,7 @@ let myRoll = null; // Variabile per memorizzare il roll del giocatore
 
 let turnCounter = 1;
 
+
 const players = new Map();
 
 const continentColors = {
@@ -61,16 +62,6 @@ socket.on("players_updated", ({ players: serverPlayers }) => {
 
 console.log("game_logic.js loaded, btnRoll:", btnRoll, "socket:", socket);
 
-function showModal() {
-    overlay.style.display = "flex";
-    pageContent.classList.add("blur");
-}
-
-function hideModal() {
-    overlay.style.display = "none";
-    pageContent.classList.remove("blur");
-}
-
 // Flag per evitare il loop infinito della roll UI
 let gameHasStarted = false;
 
@@ -97,18 +88,7 @@ if (gameAlreadyStarted) {
 const roomIdFromUrl = new URLSearchParams(window.location.search).get("id");
 const roomId = roomIdFromUrl || sessionStorage.getItem("roomId");
 
-function applyPlayerColor(continent) {
-    const color = continentColors[continent] || '#ffffff';
-    document.getElementById("pp-name").style.color = color;
-    document.getElementById("pp-continent").style.color = color;
-}
-
 // Controlla lo stato dei turni al caricamento della pagina
-function checkGameState() {
-    if (roomId && socket.connected) {
-        socket.emit("check_turn_order_status", { roomId });
-    }
-}
 
 if (roomId && socket.connected) {
     checkGameState();
@@ -133,15 +113,6 @@ socket.on("turn_order_status", ({ isDecided, turnOrder }) => {
 // Mostra il modal solo se il gioco non è iniziato
 if (!gameHasStarted) {
     showModal();
-}
-
-function getRoomId() {
-    const rid = sessionStorage.getItem("roomId")
-        || localStorage.getItem("roomId")
-        || new URLSearchParams(window.location.search).get("roomId")
-        || new URLSearchParams(window.location.search).get("id");
-    console.log("[getRoomId]", rid);
-    return rid;
 }
 
 btnRoll.addEventListener("click", () => {
@@ -334,31 +305,16 @@ socket.on("turn", ({ currentPlayerId, turnOrder }) => {
 // Quando il giocatore finisce il suo turno
 document.getElementById("btn-end-turn").addEventListener("click", () => {
     socket.emit("end_turn", { roomId });
+    turnCounter++;
+    turnMessage(turnCounter);
 });
 
-function startGame(turnOrder) {
-    console.log("Gioco iniziato, ordine turni:", turnOrder);
-    gameHasStarted = true;
-    sessionStorage.setItem("gameStarted", "true");
-    hideModal();
-
-    // Applica placement_start bufferizzato
-    if (pendingTroops !== null) {
-        console.log("[startGame] applico pendingTroops:", pendingTroops);
-        applyPlacementStart(pendingTroops);
-        pendingTroops = null;
-    }
-}
 
 
-// --- BATTLE LOGIC ---
+
 socket.on("show_action_box", () => {
     showModal();
 });
-
-function attack(attackerTroops, defenderTroops) {
-    socket.emit("win_chance", { attackerTroops, defenderTroops });
-}
 
 socket.on("battle_result", ({ winner }) => {
     if (winner === "attacker") {
@@ -368,6 +324,125 @@ socket.on("battle_result", ({ winner }) => {
     }
 });
 
+socket.on("placement_start", ({ troops }) => {
+    console.log("[placement_start] ricevuto, troops:", troops, "overlay display:", overlay.style.display);
+    // Se il modal è ancora aperto (countdown in corso), bufferizza
+    if (overlay.style.display !== "none") {
+        console.log("[placement_start] modal ancora aperto, bufferizzato");
+        pendingTroops = troops;
+        return;
+    }
+    applyPlacementStart(troops);
+});
+
+socket.on("province_updated", ({ provinceId, troops, ownerName }) => {
+    provinces[provinceId].troops = troops;
+    provinces[provinceId].owner = ownerName;
+
+    updateTroopMarker(provinceId, troops, ownerName);
+});
+
+socket.on("troops_remaining", ({ troopsToPlaceLeft }) => {
+    troopsToPlace = troopsToPlaceLeft;
+    troopsToPlaceEl.textContent = troopsToPlace;
+    if (troopsToPlace <= 0) {
+        placementBanner.style.display = "none";
+    }
+});
+
+socket.on("error", ({ message }) => {
+    if (placementPhase) {
+        showPlacementError(message);
+    } else {
+        modalDesc.textContent = message;
+    }
+});
+
+socket.on("placement_complete", () => {
+    placementPhase = false;
+});
+
+socket.on("troop_roll_start", () => {
+    modalTitle.textContent = "Tira per le Truppe!";
+    modalDesc.textContent = "Tira il dado per ricevere nuove truppe!";
+    diceRollsList.innerHTML = "";
+    diceResultDisplay.style.display = "none";
+    waitingMsg.style.display = "none";
+    btnRoll.disabled = false;
+    btnRoll.textContent = "Tira il Dado";
+    btnRoll.style.display = "block";
+    showModal();
+});
+
+
+// --- FUNZIONI DI GIOCO ---
+function turnMessage(turnCounter, placementPhase) {
+    const banner = document.getElementById("turn-banner");
+
+    // Ogni 12 turni (al turno 1, 13, 25...) mostra prima "TROOPS ASSIGNMENT TURN"
+    if (placementPhase) {
+        banner.textContent = "⚔ TROOPS ASSIGNMENT TURN ⚔";
+        banner.style.display = "block";
+        banner.style.opacity = "1";
+
+    } else {
+        banner.textContent = `TURN: ${turnCounter}`;
+        banner.style.display = "block";
+        banner.style.opacity = "1";
+
+        setTimeout(() => {
+            banner.style.opacity = "0";
+            setTimeout(() => { banner.style.display = "none"; }, 500);
+        }, 2000);
+    }
+}
+
+function showModal() {
+    overlay.style.display = "flex";
+    pageContent.classList.add("blur");
+}
+
+function hideModal() {
+    overlay.style.display = "none";
+    pageContent.classList.remove("blur");
+}
+
+function applyPlayerColor(continent) {
+    const color = continentColors[continent] || '#ffffff';
+    document.getElementById("pp-name").style.color = color;
+    document.getElementById("pp-continent").style.color = color;
+}
+
+function checkGameState() {
+    if (roomId && socket.connected) {
+        socket.emit("check_turn_order_status", { roomId });
+    }
+}
+
+function getRoomId() {
+    const rid = sessionStorage.getItem("roomId")
+        || localStorage.getItem("roomId")
+        || new URLSearchParams(window.location.search).get("roomId")
+        || new URLSearchParams(window.location.search).get("id");
+    console.log("[getRoomId]", rid);
+    return rid;
+}
+
+function startGame(turnOrder) {
+    gameHasStarted = true;
+    sessionStorage.setItem("gameStarted", "true");
+    hideModal();
+    turnMessage(turnCounter); 
+
+    if (pendingTroops !== null) {
+        applyPlacementStart(pendingTroops);
+        pendingTroops = null;
+    }
+}
+
+function attack(attackerTroops, defenderTroops) {
+    socket.emit("win_chance", { attackerTroops, defenderTroops });
+}
 
 function initMap() {
     Object.keys(provinces).forEach(id => {
@@ -404,17 +479,6 @@ function initMap() {
     });
 }
 
-socket.on("placement_start", ({ troops }) => {
-    console.log("[placement_start] ricevuto, troops:", troops, "overlay display:", overlay.style.display);
-    // Se il modal è ancora aperto (countdown in corso), bufferizza
-    if (overlay.style.display !== "none") {
-        console.log("[placement_start] modal ancora aperto, bufferizzato");
-        pendingTroops = troops;
-        return;
-    }
-    applyPlacementStart(troops);
-});
-
 function applyPlacementStart(troops) {
     console.log("[applyPlacementStart] troops:", troops);
     placementPhase = true;
@@ -431,21 +495,6 @@ function handleProvinceClick(provinceId) {
     if (troopsToPlace <= 0) return;
     socket.emit("place_troop", { provinceId, roomId: getRoomId() });
 }
-
-socket.on("province_updated", ({ provinceId, troops, ownerName }) => {
-    provinces[provinceId].troops = troops;
-    provinces[provinceId].owner = ownerName;
-
-    updateTroopMarker(provinceId, troops, ownerName);
-});
-
-socket.on("troops_remaining", ({ troopsToPlaceLeft }) => {
-    troopsToPlace = troopsToPlaceLeft;
-    troopsToPlaceEl.textContent = troopsToPlace;
-    if (troopsToPlace <= 0) {
-        placementBanner.style.display = "none";
-    }
-});
 
 function updateTroopMarker(provinceId, troops, ownerName) {
     const svgEl = document.querySelector("svg");
@@ -499,28 +548,3 @@ function showPlacementError(message) {
         el.style.display = "none";
     }, 3000);
 }
-
-
-socket.on("error", ({ message }) => {
-    if (placementPhase) {
-        showPlacementError(message);
-    } else {
-        modalDesc.textContent = message;
-    }
-});
-
-socket.on("placement_complete", () => {
-    placementPhase = false;
-});
-
-socket.on("troop_roll_start", () => {
-    modalTitle.textContent = "Tira per le Truppe!";
-    modalDesc.textContent = "Tira il dado per ricevere nuove truppe!";
-    diceRollsList.innerHTML = "";
-    diceResultDisplay.style.display = "none";
-    waitingMsg.style.display = "none";
-    btnRoll.disabled = false;
-    btnRoll.textContent = "Tira il Dado";
-    btnRoll.style.display = "block";
-    showModal();
-});
