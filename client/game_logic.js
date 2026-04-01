@@ -140,11 +140,6 @@ btnRoll.addEventListener("click", () => {
     socket.emit("roll_for_turn_order", { roomId: rId });
 });
 
-socket.on("error", ({ message }) => {
-    console.error("Errore socket:", message);
-    modalDesc.textContent = message;
-});
-
 // Aggiorna la lista quando un giocatore tira
 socket.on("player_rolled", ({ socketId, name, roll }) => {
     let row = document.getElementById(`roll-${socketId}`);
@@ -280,6 +275,7 @@ socket.on("turn_order_decided", ({ turnOrder, playerContinents }) => {
 let currentPlayer = null;
 
 socket.on("turn", ({ currentPlayerId, turnOrder }) => {
+     resetAttackState();
     currentPlayer = currentPlayerId;
     const isMyTurn = currentPlayerId === socket.id;
 
@@ -362,6 +358,7 @@ socket.on("troops_remaining", ({ troopsToPlaceLeft }) => {
 });
 
 socket.on("error", ({ message }) => {
+    console.error("Errore socket:", message);
     if (placementPhase) {
         showPlacementError(message);
     } else {
@@ -507,13 +504,119 @@ function applyPlacementStart(troops) {
     turnMessage(turnCounter, true); // mostra "TROOPS ASSIGNMENT TURN" a tutti
 }
 
+// stato locale dell'attacco
+let attackState = {
+    phase: null,           // null | "selecting_target"
+    fromProvinceId: null,
+    attackableIds: []
+};
+
+// sostituisci handleProvinceClick con questa versione:
 function handleProvinceClick(provinceId) {
-    if (!placementPhase) return;
+
+    // --- FASE PIAZZAMENTO (priorità) ---
+    if (placementPhase) {
+        const province = provinces[provinceId];
+        const myContinent = sessionStorage.getItem("playerContinent");
+        if (province.continent !== myContinent) return;
+        if (troopsToPlace <= 0) return;
+        socket.emit("place_troop", { provinceId, roomId: getRoomId() });
+        return;
+    }
+
+    // --- SOLO SE È IL MIO TURNO ---
+    if (currentPlayer !== socket.id) return;
+
     const province = provinces[provinceId];
-    const myContinent = sessionStorage.getItem("playerContinent");
-    if (province.continent !== myContinent) return;
-    if (troopsToPlace <= 0) return;
-    socket.emit("place_troop", { provinceId, roomId: getRoomId() });
+    const myName = sessionStorage.getItem("playerName");
+
+    // --- FASE 1: selezione provincia attaccante ---
+    if (attackState.phase === null) {
+        // deve essere mia e avere almeno 2 truppe
+        if (province.owner !== myName) return;
+        if ((province.troops || 0) < 1) return;
+
+        attackState.fromProvinceId = provinceId;
+        attackState.phase = "selecting_target";
+
+        // evidenzia la provincia selezionata
+        document.getElementById(provinceId).classList.add("selected-attacker");
+
+        // chiedi al server le province attaccabili
+        socket.emit("get_attackable_provinces", {
+            provinceId,
+            roomId: getRoomId()
+        });
+        return;
+    }
+
+    // --- FASE 2: selezione bersaglio ---
+    if (attackState.phase === "selecting_target") {
+
+        // click sulla stessa provincia = deseleziona
+        if (provinceId === attackState.fromProvinceId) {
+            resetAttackState();
+            return;
+        }
+
+        // click su una provincia non attaccabile = ignora
+        if (!attackState.attackableIds.includes(provinceId)) return;
+
+        // attacca!
+        socket.emit("attack", {
+            fromProvinceId: attackState.fromProvinceId,
+            toProvinceId: provinceId,
+            roomId: getRoomId()
+        });
+
+        resetAttackState();
+    }
+}
+
+// ricevi le province attaccabili dal server e aggiorna la grafica
+socket.on("attackable_provinces", ({ fromProvinceId, attackable }) => {
+    attackState.attackableIds = attackable;
+
+    // attenua tutte le province, poi evidenzia solo le attaccabili
+    Object.keys(provinces).forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        if (id === fromProvinceId) return; // già con selected-attacker
+        if (attackable.includes(id)) {
+            el.classList.add("attackable");
+        } else {
+            el.classList.add("dimmed");
+        }
+    });
+});
+
+// ricevi il risultato dell'attacco e mostralo
+socket.on("attack_result", ({ winner, fromProvinceId, toProvinceId, attackerName, defenderName }) => {
+    const banner = document.getElementById("turn-banner");
+
+    if (winner === "attacker") {
+        banner.textContent = `⚔ ${attackerName.toUpperCase()} HA CONQUISTATO LA PROVINCIA! ⚔`;
+    } else {
+        banner.textContent = `🛡 ${defenderName.toUpperCase()} HA RESISTITO! ⚔`;
+    }
+
+    banner.style.display = "block";
+    banner.style.opacity = "1";
+    setTimeout(() => {
+        banner.style.opacity = "0";
+        setTimeout(() => { banner.style.display = "none"; }, 500);
+    }, 3000);
+});
+
+// pulizia stato attacco
+function resetAttackState() {
+    attackState.phase = null;
+    attackState.fromProvinceId = null;
+    attackState.attackableIds = [];
+
+    document.querySelectorAll(".province-fill").forEach(el => {
+        el.classList.remove("selected-attacker", "attackable", "dimmed");
+    });
 }
 
 function updateTroopMarker(provinceId, troops, ownerName) {
