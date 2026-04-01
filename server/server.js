@@ -8,6 +8,7 @@ const path = require("path");
 const session = require("express-session");
 const cookieParser = require("cookie-parser");
 const provinces = require("./provinces");
+const borders = require("./borders");
 const authRouter = require("./auth");
 const app = express();
 const httpServer = createServer(app);
@@ -388,6 +389,16 @@ io.on("connection", (socket) => {
     });
 
 // --- GAME LOGIC ---
+socket.on("get_attackable_provinces", ({ provinceId }) => { //prende le province vicine che si possono attaccare
+    const neighbors = adjacencies[provinceId] || [];
+    // filtra solo quelle nemiche
+    const attackable = neighbors.filter(id => {
+        const p = room.provinces[id];
+        return p && p.owner !== socket.id;
+    });
+    socket.emit("attackable_provinces", { attackable });
+});
+
     socket.on("win_chance", ({ attackerTroops, defenderTroops }) => {
         const winner = resolveBattle(attackerTroops, defenderTroops);
 
