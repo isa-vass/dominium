@@ -19,6 +19,8 @@ let myRoll = null; // Variabile per memorizzare il roll del giocatore
 
 let turnCounter = 1;
 
+let isTroopRoll = false;
+
 
 const players = new Map();
 
@@ -134,10 +136,21 @@ btnRoll.addEventListener("click", () => {
 
     sessionStorage.setItem("roomId", rId);
 
+    const roll = Math.floor(Math.random() * 6) + 1;
+
     btnRoll.disabled = true;
     btnRoll.textContent = "Dado tirato!";
-    console.log("[btnRoll] emitting roll_for_turn_order");
-    socket.emit("roll_for_turn_order", { roomId: rId });
+
+    if (isTroopRoll) {
+        console.log("[btnRoll] emitting roll_for_troops");
+        socket.emit("roll_for_troops", { roomId: rId, roll });
+        // mostra il roll
+        diceResultDisplay.style.display = "block";
+        myRollValue.textContent = roll;
+    } else {
+        console.log("[btnRoll] emitting roll_for_turn_order");
+        socket.emit("roll_for_turn_order", { roomId: rId });
+    }
 });
 
 // Aggiorna la lista quando un giocatore tira
@@ -176,24 +189,29 @@ socket.on("player_rolled", ({ socketId, name, roll }) => {
     }
 });
 
-// Pareggio
-socket.on("turn_order_tie", ({ tiedPlayerIds, tiedNames }) => {
-    const isTied = tiedPlayerIds.includes(socket.id);
+// Listener per roll truppe
+socket.on("player_troop_rolled", ({ socketId, name, roll }) => {
+    let row = document.getElementById(`troop-roll-${socketId}`);
+    if (!row) {
+        row = document.createElement("div");
+        row.id = `troop-roll-${socketId}`;
+        row.classList.add("dice-roll-row");
+        diceRollsList.appendChild(row);
+    }
 
-    modalTitle.textContent = "Pareggio!";
-    modalDesc.textContent = `Pareggio tra: ${tiedNames.join(", ")}. Devono ritirare il dado.`;
-    diceRollsList.innerHTML = "";
-    diceResultDisplay.style.display = "none";
-    waitingMsg.style.display = "none";
+    const isMe = socketId === socket.id;
+    row.innerHTML = `
+        <span class="dice-roll-name">${name}${isMe ? " (tu)" : ""}</span>
+        <div class="dice-roll-badge">
+            <div class="dice-face">${roll}</div>
+        </div>
+    `;
 
-    if (isTied) {
-        btnRoll.disabled = false;
-        btnRoll.textContent = "Ritira il Dado";
-        btnRoll.style.display = "block";
-    } else {
-        btnRoll.style.display = "none";
+    if (isMe) {
+        diceResultDisplay.style.display = "block";
+        myRollValue.textContent = roll;
         waitingMsg.style.display = "block";
-        waitingMsg.textContent = "In attesa dell'esito del pareggio...";
+        waitingMsg.textContent = "In attesa degli altri giocatori...";
     }
 });
 
@@ -290,7 +308,7 @@ socket.on("turn", ({ currentPlayerId, turnOrder }) => {
     const btnEnd = document.getElementById("btn-end-turn");
     const banner = document.getElementById("turn-banner");
 
-    if (isMyTurn) {
+    if (isMyTurn && !placementPhase) {
         turnMessage(turnCounter, false, true);
         btnEnd.style.display = "block";
         enableGameControls();
@@ -333,12 +351,10 @@ socket.on("battle_result", ({ winner }) => {
 
 socket.on("placement_start", ({ troops }) => {
     console.log("[placement_start] ricevuto, troops:", troops, "overlay display:", overlay.style.display);
-    // Se il modal è ancora aperto (countdown in corso), bufferizza
-    if (overlay.style.display !== "none") {
-        console.log("[placement_start] modal ancora aperto, bufferizzato");
-        pendingTroops = troops;
-        return;
-    }
+    isTroopRoll = false; // reset
+    hideModal(); // Chiudi il modal sempre
+    // Nascondi il bottone Fine Turno durante il placement
+    document.getElementById("btn-end-turn").style.display = "none";
     applyPlacementStart(troops);
 });
 
@@ -374,7 +390,16 @@ socket.on("placement_complete", () => {
     setTimeout(() => { banner.style.display = "none"; }, 500);
 });
 
+// Aggiorna le truppe totali quando cambiano (solo durante attacchi/battaglia)
+socket.on("player_troops_updated", ({ playerName, troopsRemaining }) => {
+    const currentName = sessionStorage.getItem("playerName");
+    if (playerName === currentName) {
+        document.getElementById("pp-troops").textContent = troopsRemaining;
+    }
+});
+
 socket.on("troop_roll_start", () => {
+    isTroopRoll = true;
     // Banner flash per tutti
     const banner = document.getElementById("turn-banner");
     banner.textContent = "⚔ NUOVO LANCIO TRUPPE ⚔";
@@ -590,22 +615,95 @@ socket.on("attackable_provinces", ({ fromProvinceId, attackable }) => {
     });
 });
 
-// ricevi il risultato dell'attacco e mostralo
-socket.on("attack_result", ({ winner, fromProvinceId, toProvinceId, attackerName, defenderName }) => {
+// Ricevi alert di attacco
+socket.on("under_attack", ({ attackerName, fromProvinceId, toProvinceId }) => {
+    const alert = document.createElement("div");
+    alert.style.cssText = `
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: linear-gradient(135deg, #8b0000 0%, #ff0000 50%, #8b0000 100%);
+        color: white;
+        padding: 30px 50px;
+        border-radius: 15px;
+        z-index: 1000;
+        font-size: 24px;
+        font-weight: bold;
+        text-align: center;
+        box-shadow: 0 0 50px rgba(255, 0, 0, 0.8);
+        animation: pulse 0.5s ease-in-out;
+    `;
+    alert.textContent = `⚠️ ATTACCO! ${attackerName} ti sta attaccando!`;
+    document.body.appendChild(alert);
+    setTimeout(() => alert.remove(), 3000);
+});
+
+// ricevi il risultato dell'attacco e mostralo con animazioni
+socket.on("attack_result", ({ winner, fromProvinceId, toProvinceId, attackerName, defenderName, attackerDices, defenderDices, attackerLosses, defenderLosses, provinceConquered }) => {
     const banner = document.getElementById("turn-banner");
 
-    if (winner === "attacker") {
-        banner.textContent = `⚔ ${attackerName.toUpperCase()} HA CONQUISTATO LA PROVINCIA! ⚔`;
-    } else {
-        banner.textContent = `🛡 ${defenderName.toUpperCase()} HA RESISTITO! ⚔`;
-    }
+    // Mostra i dadi dell'attaccante con animazione
+    const diceDisplayAttacker = document.createElement("div");
+    diceDisplayAttacker.style.cssText = `
+        position: fixed;
+        top: 20px;
+        left: 20px;
+        background: rgba(139, 0, 0, 0.9);
+        color: white;
+        padding: 15px 25px;
+        border-radius: 10px;
+        font-weight: bold;
+        z-index: 999;
+        animation: slideIn 0.5s ease;
+    `;
+    diceDisplayAttacker.textContent = `${attackerName} tira: [${attackerDices.join(", ")}]`;
+    document.body.appendChild(diceDisplayAttacker);
 
-    banner.style.display = "block";
-    banner.style.opacity = "1";
+    // Dopo 1.5s, mostra i dadi del difensore
     setTimeout(() => {
-        banner.style.opacity = "0";
-        setTimeout(() => { banner.style.display = "none"; }, 500);
-    }, 3000);
+        const diceDisplayDefender = document.createElement("div");
+        diceDisplayDefender.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 100, 150, 0.9);
+            color: white;
+            padding: 15px 25px;
+            border-radius: 10px;
+            font-weight: bold;
+            z-index: 999;
+            animation: slideIn 0.5s ease;
+        `;
+        diceDisplayDefender.textContent = `${defenderName} tira: [${defenderDices.join(", ")}]`;
+        document.body.appendChild(diceDisplayDefender);
+
+        // Dopo altri 1.5s, mostra il risultato finale
+        setTimeout(() => {
+            diceDisplayAttacker.remove();
+            diceDisplayDefender.remove();
+
+            const attackerDicesStr = attackerDices.join(",");
+            const defenderDicesStr = defenderDices.join(",");
+
+            if (winner === "attacker") {
+                if (provinceConquered) {
+                    banner.textContent = `🎯 ${attackerName} ha conquistato! Perdite: A=${attackerLosses} D=${defenderLosses}`;
+                } else {
+                    banner.textContent = `⚔ ${attackerName} vince il round! Perdite: A=${attackerLosses} D=${defenderLosses}`;
+                }
+            } else {
+                banner.textContent = `🛡 ${defenderName} resiste! Perdite: A=${attackerLosses} D=${defenderLosses}`;
+            }
+
+            banner.style.display = "block";
+            banner.style.opacity = "1";
+            setTimeout(() => {
+                banner.style.opacity = "0";
+                setTimeout(() => { banner.style.display = "none"; }, 500);
+            }, 3000);
+        }, 1500);
+    }, 1500);
 });
 
 // pulizia stato attacco

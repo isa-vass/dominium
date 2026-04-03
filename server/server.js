@@ -93,6 +93,38 @@ function debugRooms(msg) {
     console.log("[ROOMS DEBUG]", msg, "keys:", Array.from(rooms.keys()));
 }
 
+function resolveTies(playersWithRolls, resolved = []) {
+    // playersWithRolls: array of {socketId, roll}
+    // Sort by roll descending
+    playersWithRolls.sort((a, b) => b.roll - a.roll);
+
+    // Group by roll
+    const groups = [];
+    let currentGroup = [playersWithRolls[0]];
+    for (let i = 1; i < playersWithRolls.length; i++) {
+        if (playersWithRolls[i].roll === currentGroup[0].roll) {
+            currentGroup.push(playersWithRolls[i]);
+        } else {
+            groups.push(currentGroup);
+            currentGroup = [playersWithRolls[i]];
+        }
+    }
+    groups.push(currentGroup);
+
+    // For each group, if size > 1, reroll recursively, else add to resolved
+    for (const group of groups) {
+        if (group.length === 1) {
+            resolved.push(group[0]);
+        } else {
+            // Reroll
+            const rerolled = group.map(p => ({ ...p, roll: Math.floor(Math.random() * 6) + 1 }));
+            resolveTies(rerolled, resolved);
+        }
+    }
+
+    return resolved;
+}
+
 io.on("connection", (socket) => {
     socket.emit("welcome", "Welcome to Dominium!");
 
@@ -401,9 +433,9 @@ io.on("connection", (socket) => {
 
         // la provincia attaccante deve essere tua e avere almeno 2 truppe
         const attacker = room.provinces[provinceId];
-        if (!attacker || attacker.owner !== socket.id) return;
-        if (attacker.troops < 1) {
-            socket.emit("error", { message: "You need at least 1 troop to attack" });
+        if (!attacker || attacker.owner !== player.name) return;
+        if (attacker.troops < 2) {
+            socket.emit("error", { message: "Hai bisogno di almeno 2 truppe per attaccare" });
             return;
         }
 
@@ -411,7 +443,7 @@ io.on("connection", (socket) => {
         const attackable = neighbors.filter(id => {
             const p = room.provinces[id];
             // attaccabile se esiste ed è di qualcun altro
-            return p && p.owner && p.owner !== socket.id;
+            return p && p.owner && p.owner !== player.name;
         });
 
         socket.emit("attackable_provinces", { fromProvinceId: provinceId, attackable });
@@ -424,14 +456,17 @@ io.on("connection", (socket) => {
         // controlli di sicurezza
         if (room.turnOrder[room.currentTurnIndex] !== socket.id) return;
 
+        const attackerPlayer = room.turnOrderDetails.find(p => p.socketId === socket.id);
+        if (!attackerPlayer) return;
+
         const attacker = room.provinces[fromProvinceId];
         const defender = room.provinces[toProvinceId];
 
         if (!attacker || !defender) return;
-        if (attacker.owner !== socket.id) return;
-        if (defender.owner === socket.id) return;
-        if (attacker.troops < 1) {
-            socket.emit("error", { message: "You need at least 1 troop to attack" });
+        if (attacker.owner !== attackerPlayer.name) return;
+        if (defender.owner === attackerPlayer.name) return;
+        if (attacker.troops < 2) {
+            socket.emit("error", { message: "Hai bisogno di almeno 2 truppe per attaccare" });
             return;
         }
 
@@ -442,70 +477,35 @@ io.on("connection", (socket) => {
             return;
         }
 
-        const winner = resolveBattle(attacker.troops, defender.troops);
-        const defenderSocketId = defender.owner;
+        // Trova il difensore
+        const defenderPlayer = room.turnOrderDetails.find(p => p.name === defender.owner);
+        if (!defenderPlayer) return;
 
-        if (winner === "attacker") {
-            // l'attaccante conquista: sposta tutte le truppe tranne 1
-            const movingTroops = attacker.troops - 1;
-            attacker.troops = 1;
-            defender.troops = movingTroops;
-            defender.owner = socket.id;
+        // Calcola numero di dadi per attaccante e difensore
+        const attackerNumDice = Math.min(3, attacker.troops - 1);
+        const defenderNumDice = Math.min(2, defender.troops);
 
-            // aggiorna il nome del proprietario per il client
-            const attackerPlayer = room.turnOrderDetails.find(p => p.socketId === socket.id);
-            const defenderPlayer = room.turnOrderDetails.find(p => p.socketId === defenderSocketId);
+        // Salva lo stato dell'attacco in corso
+        room.currentAttack = {
+            fromProvinceId,
+            toProvinceId,
+            roomId,
+            attacker,
+            defender,
+            attackerPlayer,
+            defenderPlayer,
+            attackerNumDice,
+            defenderNumDice,
+            attackerDices: null,
+            defenderDices: null
+        };
 
-            io.to(roomId).emit("province_updated", {
-                provinceId: fromProvinceId,
-                troops: attacker.troops,
-                ownerName: attackerPlayer?.name
-            });
-            io.to(roomId).emit("province_updated", {
-                provinceId: toProvinceId,
-                troops: defender.troops,
-                ownerName: attackerPlayer?.name
-            });
-            io.to(roomId).emit("attack_result", {
-                winner: "attacker",
-                fromProvinceId,
-                toProvinceId,
-                attackerName: attackerPlayer?.name,
-                defenderName: defenderPlayer?.name
-            });
-        } else {
-            attacker.troops--;
-
-            const attackerPlayer = room.turnOrderDetails.find(p => p.socketId === socket.id);
-            const defenderPlayer = room.turnOrderDetails.find(p => p.socketId === defenderSocketId);
-
-            if (attacker.troops <= 0) {
-                // la provincia attaccante viene conquistata dal difensore
-                attacker.owner = defenderPlayer?.name;
-                attacker.troops = 1; // il difensore lascia 1 truppa
-
-                io.to(roomId).emit("province_updated", {
-                    provinceId: fromProvinceId,
-                    troops: 1,
-                    ownerName: defenderPlayer?.name
-                });
-            } else {
-                io.to(roomId).emit("province_updated", {
-                    provinceId: fromProvinceId,
-                    troops: attacker.troops,
-                    ownerName: attackerPlayer?.name
-                });
-            }
-
-            io.to(roomId).emit("attack_result", {
-                winner: "defender",
-                fromProvinceId,
-                toProvinceId,
-                attackerName: attackerPlayer?.name,
-                defenderName: defenderPlayer?.name,
-                provinceConquered: attacker.troops <= 0 // flag opzionale per il client
-            });
-        }
+        // Notifica all'attaccante di tirare i dadi
+        socket.emit("attack_dice_request", {
+            numDice: attackerNumDice,
+            role: "attacker",
+            versus: defenderPlayer.name
+        });
     });
 
     socket.on("win_chance", ({ attackerTroops, defenderTroops }) => {
@@ -540,12 +540,8 @@ io.on("connection", (socket) => {
 
         if (!room.turnOrderRolls) room.turnOrderRolls = {};
 
-        // ── FIX 1: Ignora roll doppi solo se non è un pareggio in corso ──
-        // Se il socket ha già tirato E non fa parte dei tiedPlayers attuali, ignora
-        if (room.turnOrderRolls[socket.id]) {
-            const isTied = room.tiedPlayers && room.tiedPlayers.includes(socket.id);
-            if (!isTied) return;
-        }
+        // Ignore duplicate rolls
+        if (room.turnOrderRolls[socket.id]) return;
 
         const roll = Math.floor(Math.random() * 6) + 1;
         room.turnOrderRolls[socket.id] = roll;
@@ -553,11 +549,9 @@ io.on("connection", (socket) => {
         const playerName = socket.request.session.userName || socket.id;
         io.to(effectiveRoomId).emit("player_rolled", { socketId: socket.id, name: playerName, roll });
 
-        // ── FIX 2: Usa tiedPlayers per sapere quanti devono tirare ──
-        // Se c'è un pareggio in corso, aspetta solo i pareggiati; altrimenti tutti i giocatori
-        const expectedPlayers = room.tiedPlayers || room.players;
-        const totalPlayers = expectedPlayers.length;
-        const totalRolled = expectedPlayers.filter(id => room.turnOrderRolls[id] !== undefined).length;
+        // Wait for all players
+        const totalPlayers = room.players.length;
+        const totalRolled = Object.keys(room.turnOrderRolls).length;
 
         if (totalRolled === totalPlayers) {
             try {
@@ -572,49 +566,25 @@ io.on("connection", (socket) => {
 
                     if (!isTroopRefill) {
                         // === PRIMO LANCIO: stabilisce ordine turni ===
-                        // Controlla pareggi
-                        const scores = sorted.map(([, v]) => v);
-                        const tiedScore = scores.find((score, i) => scores.indexOf(score) !== i);
+                        const playersWithRolls = room.players.map(id => ({socketId: id, roll: room.turnOrderRolls[id]}));
+                        const resolved = resolveTies(playersWithRolls);
 
-                        if (tiedScore !== undefined) {
-                            const tied = sorted.filter(([, v]) => v === tiedScore);
-                            const notTied = sorted.filter(([, v]) => v !== tiedScore);
-                            room.previousRolls = Object.fromEntries(notTied);
-                            room.tiedPlayers = tied.map(([id]) => id);
-                            room.turnOrderRolls = {};
-                            const tiedNames = room.tiedPlayers.map(id =>
-                                io.sockets.sockets.get(id)?.request?.session?.userName || id
-                            );
-                            io.to(effectiveRoomId).emit("turn_order_tie", {
-                                tiedPlayerIds: room.tiedPlayers,
-                                tiedNames
-                            });
-                            return;
-                        }
-
-                        // Nessun pareggio — ordine definitivo
-                        const turnOrder = sorted.map(([id, roll]) => {
-                            const name = io.sockets.sockets.get(id)?.request?.session?.userName || id;
+                        const turnOrderDetails = resolved.map(p => {
+                            const name = io.sockets.sockets.get(p.socketId)?.request?.session?.userName || p.socketId;
                             const continent = Array.from(room.selectedContinents.entries())
                                 .find(([, n]) => n === name)?.[0] || "";
-                            return { socketId: id, name, continent, roll, troops: 0 };
+                            return { socketId: p.socketId, name, continent, roll: p.roll, troops: troopAssignment(p.roll, 0) };
                         });
 
-                        turnOrder.forEach(player => {
-                            player.troops = troopAssignment(player.roll, 0);
-                        });
-
-                        room.turnOrder = turnOrder.map(p => p.socketId);
-                        room.turnOrderDetails = turnOrder;
+                        room.turnOrder = turnOrderDetails.map(p => p.socketId);
+                        room.turnOrderDetails = turnOrderDetails;
                         room.currentTurnIndex = 0;
                         room.turnCount = 0;
                         room.isRollingForTroops = false;
                         room.turnOrderRolls = {};
-                        room.tiedPlayers = null;
-                        room.previousRolls = null;
 
                         io.to(effectiveRoomId).emit("turn_order_decided", {
-                            turnOrder,
+                            turnOrder: turnOrderDetails,
                             playerContinents: Object.fromEntries(room.selectedContinents),
                         });
 
@@ -681,7 +651,7 @@ io.on("connection", (socket) => {
             room.provinces[provinceId] = { troops: 0, owner: null };
         }
         room.provinces[provinceId].troops++;
-        room.provinces[provinceId].owner = socket.id;
+        room.provinces[provinceId].owner = player.name;
         player.troops--;
 
         io.to(roomId).emit("province_updated", {
@@ -757,8 +727,8 @@ io.on("connection", (socket) => {
                 room.placementDone = new Set();
                 room.turnOrderRolls = {};
                 room.isRollingForTroops = true;
+                room.troopRolls = {};
                 io.to(roomId).emit("troop_roll_start");
-                return;
             }
         }
 
@@ -767,18 +737,51 @@ io.on("connection", (socket) => {
             turnOrder: room.turnOrderDetails
         });
     });
+
+    socket.on("roll_for_troops", ({ roomId, roll }) => {
+        const room = rooms.get(roomId);
+        if (!room || !room.troopRolls) return;
+
+        if (room.troopRolls[socket.id]) return; // già tirato
+
+        room.troopRolls[socket.id] = roll;
+
+        const playerName = socket.request.session.userName;
+        io.to(roomId).emit("player_troop_rolled", { socketId: socket.id, name: playerName, roll });
+
+        // quando tutti hanno tirato
+        if (Object.keys(room.troopRolls).length === room.players.length) {
+            // assegna truppe
+            room.turnOrderDetails.forEach(player => {
+                const roll = room.troopRolls[player.socketId];
+                const newTroops = troopAssignment(roll, player.troops);
+                if (newTroops !== null) {
+                    player.troops = newTroops;
+                }
+            });
+
+            // emette placement_start per ogni giocatore
+            room.turnOrderDetails.forEach(player => {
+                const socket = io.sockets.sockets.get(player.socketId);
+                if (socket) {
+                    socket.emit("placement_start", { troops: player.troops });
+                }
+            });
+
+            // reset
+            delete room.troopRolls;
+            room.isRollingForTroops = false;
+        }
+    });
 });
 
-function resolveBattle(attackerTroops, defenderTroops) {
-    if (attackerTroops > defenderTroops) {
-        return "attacker";
+// Tira i dadi (da 1 a numDice dadi)
+function rollDice(numDice) {
+    const dices = [];
+    for (let i = 0; i < numDice; i++) {
+        dices.push(Math.floor(Math.random() * 6) + 1);
     }
-
-    if (defenderTroops > attackerTroops) {
-        return "defender";
-    }
-
-    return Math.random() < 0.5 ? "attacker" : "defender";
+    return dices;
 }
 
 httpServer.listen(3000, () => {

@@ -1143,6 +1143,26 @@ body::before {
     box-shadow: 0 6px 25px rgba(255,0,0,0.8);
 }
 
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateX(-30px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+@keyframes pulse {
+    0%, 100% {
+        transform: translate(-50%, -50%) scale(1);
+    }
+    50% {
+        transform: translate(-50%, -50%) scale(1.1);
+    }
+}
+
 /* provincia selezionata come attaccante */
 .province-fill.selected-attacker {
     filter: brightness(1.5);
