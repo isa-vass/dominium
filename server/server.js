@@ -481,31 +481,94 @@ io.on("connection", (socket) => {
         const defenderPlayer = room.turnOrderDetails.find(p => p.name === defender.owner);
         if (!defenderPlayer) return;
 
-        // Calcola numero di dadi per attaccante e difensore
-        const attackerNumDice = Math.min(3, attacker.troops - 1);
-        const defenderNumDice = Math.min(2, defender.troops);
+        // Implementa logica corretta di attacco con dadi
+        const attackerDices = rollDice(Math.min(3, attacker.troops - 1));
+        const defenderDices = rollDice(Math.min(2, defender.troops));
 
-        // Salva lo stato dell'attacco in corso
-        room.currentAttack = {
+        // Ordina i dadi in ordine decrescente
+        attackerDices.sort((a, b) => b - a);
+        defenderDices.sort((a, b) => b - a);
+
+        let attackerLosses = 0;
+        let defenderLosses = 0;
+
+        // Confronta i dadi a coppie
+        const rounds = Math.min(attackerDices.length, defenderDices.length);
+        for (let i = 0; i < rounds; i++) {
+            if (attackerDices[i] > defenderDices[i]) {
+                defenderLosses++;
+            } else {
+                attackerLosses++;
+            }
+        }
+
+        // Applica i danni
+        attacker.troops -= attackerLosses;
+        defender.troops -= defenderLosses;
+
+        // Se il difensore ha 0 truppe, l'attaccante conquista
+        let provinceConquered = false;
+        if (defender.troops <= 0) {
+            provinceConquered = true;
+            // Trasferisce le truppe rimanenti (escludendo almeno 1 che rimane nella provincia d'origine)
+            const conqueringTroops = Math.max(1, attacker.troops - 1);
+            defender.owner = attackerPlayer.name;
+            defender.troops = conqueringTroops;
+            attacker.troops = Math.max(1, attacker.troops - conqueringTroops);
+        }
+
+        // Aggiorna le truppe totali dei giocatori
+        attackerPlayer.troops -= attackerLosses;
+        defenderPlayer.troops -= defenderLosses;
+
+        // Notifica gli aggiornamenti delle province
+        io.to(roomId).emit("province_updated", {
+            provinceId: fromProvinceId,
+            troops: attacker.troops,
+            ownerName: attacker.owner
+        });
+        io.to(roomId).emit("province_updated", {
+            provinceId: toProvinceId,
+            troops: defender.troops,
+            ownerName: defender.owner
+        });
+
+        // Notifica i risultati della battaglia
+        io.to(roomId).emit("attack_result", {
+            winner: defenderLosses > attackerLosses ? "attacker" : "defender",
             fromProvinceId,
             toProvinceId,
-            roomId,
-            attacker,
-            defender,
-            attackerPlayer,
-            defenderPlayer,
-            attackerNumDice,
-            defenderNumDice,
-            attackerDices: null,
-            defenderDices: null
-        };
-
-        // Notifica all'attaccante di tirare i dadi
-        socket.emit("attack_dice_request", {
-            numDice: attackerNumDice,
-            role: "attacker",
-            versus: defenderPlayer.name
+            attackerName: attackerPlayer.name,
+            defenderName: defenderPlayer.name,
+            attackerDices,
+            defenderDices,
+            attackerLosses,
+            defenderLosses,
+            provinceConquered
         });
+
+        // Notifica aggiornamento truppe totali ai giocatori interessati
+        const attackerSocket = io.sockets.sockets.get(socket.id);
+        if (attackerSocket) {
+            attackerSocket.emit("player_troops_updated", {
+                playerName: attackerPlayer.name,
+                troopsRemaining: attackerPlayer.troops
+            });
+        }
+
+        const defenderSocket = Array.from(io.sockets.sockets.values()).find(s => s.request.session.userName === defenderPlayer.name && room.players.includes(s.id));
+        if (defenderSocket) {
+            defenderSocket.emit("player_troops_updated", {
+                playerName: defenderPlayer.name,
+                troopsRemaining: defenderPlayer.troops
+            });
+            // Notifica al difensore che è stato attaccato
+            defenderSocket.emit("under_attack", {
+                attackerName: attackerPlayer.name,
+                fromProvinceId,
+                toProvinceId
+            });
+        }
     });
 
     socket.on("win_chance", ({ attackerTroops, defenderTroops }) => {
