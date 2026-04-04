@@ -1210,7 +1210,7 @@ body::before {
     font-family: 'Cinzel Decorative', Georgia, serif;
     font-size: 1.3em !important;
     text-shadow: 0 0 10px rgba(167, 201, 87, 0.5);
-    animation: pulse-opacity 1.5s ease-in-out infinite;
+    
 }
 
 #placement-banner {
