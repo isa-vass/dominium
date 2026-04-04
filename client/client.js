@@ -273,9 +273,45 @@ function startCountdown(seconds, type = "normal") {
 
 function stopCountdown() {
     const bar = document.getElementById("countdown-bar");
-    if (!bar) return; // ← aggiunta
+    if (!bar) return;
     clearInterval(countdownInterval);
     bar.classList.remove("visible");
+}
+
+let gameTimerInterval = null;
+function formatTimer(seconds) {
+    const minutes = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${minutes}:${secs.toString().padStart(2, "0")}`;
+}
+
+function startGameTimer(endTime, serverTime) {
+    const display = document.getElementById("game-timer-display");
+    if (!display) return;
+
+    display.style.display = "block";
+
+    clearInterval(gameTimerInterval);
+    gameTimerInterval = setInterval(() => {
+        const remaining = Math.max(0, Math.ceil((endTime - Date.now()) / 1000));
+        if (remaining <= 0) {
+            clearInterval(gameTimerInterval);
+            display.textContent = formatTimer(0);
+            return;
+        }
+        display.textContent = formatTimer(remaining);
+    }, 1000);
+    
+    // Aggiorna immediatamente
+    const remaining = Math.max(0, Math.ceil((endTime - Date.now()) / 1000));
+    display.textContent = formatTimer(remaining);
+}
+
+function stopGameTimer() {
+    const display = document.getElementById("game-timer-display");
+    if (!display) return;
+    clearInterval(gameTimerInterval);
+    display.style.display = "none";
 }
 
 let hasSelectedContinent = false;
@@ -302,6 +338,10 @@ socket.on("players_updated", ({ players }) => {
 
 socket.on("game_countdown_start", ({ seconds }) => {
     if (typeof startCountdown === "function") startCountdown(seconds, "game");
+});
+
+socket.on("game_timer_start", ({ endTime, serverTime }) => {
+    if (typeof startGameTimer === "function") startGameTimer(endTime, serverTime);
 });
 
 socket.on("countdown_stop", () => {

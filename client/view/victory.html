@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="it">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dominium - Victory</title>
+    <link rel="stylesheet" href="../css/style.css">
+    <style>
+        body {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #121827;
+        }
+
+        .victory-box {
+            width: min(660px, 100%);
+            padding: 32px;
+            border-radius: 18px;
+            background: rgba(11, 20, 39, 0.96);
+            border: 1px solid rgba(255, 68, 68, 0.18);
+            box-shadow: 0 25px 70px rgba(0, 0, 0, 0.35);
+            color: #e8e8f0;
+            text-align: center;
+        }
+
+        .victory-box h1 {
+            margin-bottom: 10px;
+            font-size: 3rem;
+            letter-spacing: 0.2em;
+            color: #ff4444;
+            text-transform: uppercase;
+            font-family: 'Cinzel Decorative', Georgia, serif;
+        }
+
+        .victory-subtitle {
+            margin-bottom: 24px;
+            color: #f5f5f5;
+            font-size: 1.05rem;
+            opacity: 0.85;
+            line-height: 1.6;
+        }
+
+        .result-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            margin: 0 auto 26px;
+            padding: 16px 22px;
+            border-radius: 999px;
+            background: rgba(255, 68, 68, 0.12);
+            color: #ffbbbb;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .result-badge.win {
+            background: rgba(34, 197, 94, 0.16);
+            color: #a7f3d0;
+        }
+
+        .ranking-list {
+            display: grid;
+            gap: 12px;
+            margin-bottom: 28px;
+            text-align: left;
+        }
+
+        .ranking-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 18px;
+            padding: 16px 20px;
+            border-radius: 14px;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+        }
+
+        .ranking-item.top {
+            border-color: #22c55e;
+            background: rgba(34, 197, 94, 0.1);
+        }
+
+        .ranking-name {
+            font-size: 1rem;
+            font-weight: 700;
+            color: #fff;
+        }
+
+        .ranking-score {
+            font-size: 0.95rem;
+            color: #cbd5e1;
+            min-width: 108px;
+            text-align: right;
+        }
+
+        .ranking-result {
+            font-size: 0.82rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            padding: 6px 12px;
+            border-radius: 999px;
+        }
+
+        .ranking-result.win {
+            color: #16a34a;
+            background: rgba(22, 163, 74, 0.12);
+        }
+
+        .ranking-result.lose {
+            color: #db2777;
+            background: rgba(220, 38, 38, 0.12);
+        }
+
+        #victory-actions {
+            display: flex;
+            justify-content: center;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+
+        .btn-small {
+            min-width: 170px;
+            padding: 14px 20px;
+            border-radius: 10px;
+            border: 2px solid #ff4444;
+            background: linear-gradient(135deg, #8b0000 0%, #ff0000 45%, #8b0000 100%);
+            color: #fff;
+            text-transform: uppercase;
+            font-weight: 700;
+            letter-spacing: 1px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="victory-box">
+        <h1>Classifica Finale</h1>
+        <div class="result-badge" id="result-badge">Attendi...</div>
+        <p class="victory-subtitle" id="result-reason">Stiamo caricando i risultati della partita...</p>
+
+        <div class="ranking-list" id="ranking-list">
+            <div class="ranking-item">
+                <div class="ranking-name">Caricamento...</div>
+                <div class="ranking-score">—</div>
+            </div>
+        </div>
+
+        <div id="victory-actions">
+            <button class="btn-small" id="btn-home">Torna al menu</button>
+            <button class="btn-small" id="btn-replay">Ritorna alla stanza</button>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        const params = new URLSearchParams(window.location.search);
+        const roomId = params.get('id');
+        const storageKey = 'dominiumGameResults';
+        const rankingList = document.getElementById('ranking-list');
+        const resultBadge = document.getElementById('result-badge');
+        const resultReason = document.getElementById('result-reason');
+        const btnHome = document.getElementById('btn-home');
+        const btnReplay = document.getElementById('btn-replay');
+
+        btnHome.addEventListener('click', () => {
+            sessionStorage.removeItem(storageKey);
+            window.location.href = '/view/action.html';
+        });
+
+        btnReplay.addEventListener('click', () => {
+            if (roomId) {
+                window.location.href = `/view/room.html?id=${encodeURIComponent(roomId)}`;
+            }
+        });
+
+        function renderResults(data) {
+            if (!data || !Array.isArray(data.results.players)) {
+                resultBadge.textContent = 'Errore';
+                resultReason.textContent = 'Impossibile caricare la classifica della partita.';
+                rankingList.innerHTML = '';
+                return;
+            }
+
+            const players = data.results.players;
+            if (players.length === 0) {
+                resultBadge.textContent = 'Nessun risultato';
+                resultReason.textContent = 'Non ci sono giocatori validi per questa partita.';
+                rankingList.innerHTML = '';
+                return;
+            }
+
+            const bestScore = players[0].provinces;
+            const currentName = sessionStorage.getItem('playerName');
+            const isWinner = currentName ? players.some(player => player.name === currentName && player.provinces === bestScore) : false;
+            const winnerNames = players.filter(player => player.provinces === bestScore).map(p => p.name);
+            const title = winnerNames.length > 1 ? 'Vittoria condivisa' : 'Vittoria';
+
+            if (isWinner) {
+                resultBadge.textContent = title;
+                resultBadge.classList.add('win');
+                resultBadge.classList.remove('lose');
+                resultReason.textContent = `Hai dominato la partita con ${bestScore} regioni conquistate.`;
+            } else {
+                resultBadge.textContent = 'Sconfitta';
+                resultBadge.classList.add('lose');
+                resultBadge.classList.remove('win');
+                resultReason.textContent = `Il vincitore ha conquistato ${bestScore} regioni. Torna e prova ancora!`;
+            }
+
+            if (data.results.reason === 'conquest') {
+                resultReason.textContent += ' Vittoria a tavolino: un giocatore ha conquistato tutte le regioni.';
+            } else if (data.results.reason === 'time') {
+                resultReason.textContent += ' La partita è terminata al termine dei 20 minuti.';
+            }
+
+            rankingList.innerHTML = '';
+            players.forEach((player, index) => {
+                const item = document.createElement('div');
+                item.className = `ranking-item ${index === 0 ? 'top' : ''}`;
+                const label = document.createElement('div');
+                label.className = 'ranking-name';
+                label.textContent = `${index + 1}. ${player.name}`;
+
+                const meta = document.createElement('div');
+                meta.style.display = 'flex';
+                meta.style.alignItems = 'center';
+                meta.style.gap = '12px';
+
+                const score = document.createElement('div');
+                score.className = 'ranking-score';
+                score.textContent = `${player.provinces} regioni`;
+
+                const status = document.createElement('div');
+                status.className = `ranking-result ${player.provinces === bestScore ? 'win' : 'lose'}`;
+                status.textContent = player.provinces === bestScore ? 'Vittoria' : 'Sconfitta';
+
+                meta.appendChild(score);
+                meta.appendChild(status);
+                item.appendChild(label);
+                item.appendChild(meta);
+                rankingList.appendChild(item);
+            });
+        }
+
+        function loadCachedResults() {
+            try {
+                const raw = sessionStorage.getItem(storageKey);
+                if (!raw) return null;
+                const parsed = JSON.parse(raw);
+                if (!parsed || parsed.roomId !== roomId) return null;
+                return parsed;
+            } catch (e) {
+                return null;
+            }
+        }
+
+        const cached = loadCachedResults();
+        if (cached) {
+            renderResults(cached);
+        } else if (roomId) {
+            socket.emit('request_game_results', { roomId });
+        }
+
+        socket.on('game_results', ({ results }) => {
+            if (!results) return;
+            const payload = { roomId, results };
+            sessionStorage.setItem(storageKey, JSON.stringify(payload));
+            renderResults(payload);
+        });
+
+        socket.on('connect_error', () => {
+            resultReason.textContent = 'Connessione al server persa. Riprova tra qualche secondo.';
+        });
+    </script>
+</body>
+
+</html>

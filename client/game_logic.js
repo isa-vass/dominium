@@ -439,6 +439,48 @@ socket.on("placement_complete", () => {
     setTimeout(() => { banner.style.display = "none"; }, 500);
 });
 
+socket.on("defeated", ({ roomId }) => {
+    // Mostra messaggio di sconfitta
+    const banner = document.getElementById("turn-banner");
+    banner.textContent = "SEI STATO SCONFITTO! Puoi spectare o abbandonare.";
+    banner.style.display = "block";
+    banner.style.opacity = "1";
+    banner.style.background = "rgba(220, 38, 38, 0.9)";
+    // Disabilita azioni del giocatore
+    document.getElementById("btn-end-turn").style.display = "none";
+    // Aggiungi pulsanti per spectare o abbandonare
+    const actionsDiv = document.createElement("div");
+    actionsDiv.id = "defeated-actions";
+    actionsDiv.style.position = "fixed";
+    actionsDiv.style.top = "50%";
+    actionsDiv.style.left = "50%";
+    actionsDiv.style.transform = "translate(-50%, -50%)";
+    actionsDiv.style.background = "rgba(0,0,0,0.9)";
+    actionsDiv.style.padding = "20px";
+    actionsDiv.style.borderRadius = "10px";
+    actionsDiv.style.textAlign = "center";
+    actionsDiv.innerHTML = `
+        <h2 style="color: #ff4444;">Sei stato sconfitto!</h2>
+        <p style="color: #fff;">Hai perso tutte le tue terre.</p>
+        <button id="btn-spectate" style="margin: 10px; padding: 10px 20px; background: #444; color: #fff; border: none; border-radius: 5px; cursor: pointer;">Specta</button>
+        <button id="btn-leave" style="margin: 10px; padding: 10px 20px; background: #844; color: #fff; border: none; border-radius: 5px; cursor: pointer;">Abbandona</button>
+    `;
+    document.body.appendChild(actionsDiv);
+    document.getElementById("btn-spectate").addEventListener("click", () => {
+        actionsDiv.remove();
+        banner.textContent = "Stai spectando la partita...";
+    });
+    document.getElementById("btn-leave").addEventListener("click", () => {
+        window.location.href = "/view/action.html";
+    });
+});
+
+socket.on("game_over", ({ roomId: resultRoomId, results }) => {
+    if (!results) return;
+    sessionStorage.setItem("dominiumGameResults", JSON.stringify({ roomId: resultRoomId, results }));
+    window.location.href = `/view/victory.html?id=${encodeURIComponent(resultRoomId)}`;
+});
+
 // Aggiorna le truppe totali quando cambiano (solo durante attacchi/battaglia)
 socket.on("player_troops_updated", ({ playerName, troopsRemaining }) => {
     const currentName = sessionStorage.getItem("playerName");
