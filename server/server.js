@@ -519,15 +519,18 @@ io.on("connection", (socket) => {
 
             if (defenderTroopsAvailable <= 1) {
                 // Truppa "regalata": rimane 1 nella provincia di difesa, 1 va nella conquistata
-                // Se il difensore aveva 1 truppa in difesa, ne riceve 1 bonus
                 defender.troops = 1;           // rimane 1 nella provincia difesa
                 attacker.troops = 1;           // 1 "regalata" nella provincia conquistata
                 defenderAutoMoved = true;
             } else {
-                // Slider: può spostare da 1 a troops-1 (deve lasciarne almeno 1)
-                defenderMinMovable = 1;
-                defenderMaxMovable = defenderTroopsAvailable - 1;
-                // Le truppe non vengono ancora spostate, aspettiamo confirm
+                // Spostamento minimo automatico: lascia almeno 1 truppa nella provincia di difesa e mette 1 nella provincia conquistata
+                defender.troops = defenderTroopsAvailable - 1;
+                attacker.troops = 1;
+                defenderMinMovable = 0;
+                defenderMaxMovable = Math.max(0, defender.troops - 1);
+                if (defenderMaxMovable === 0) {
+                    defenderAutoMoved = true;
+                }
             }
 
             io.to(roomId).emit("attack_result", {
@@ -541,7 +544,7 @@ io.on("connection", (socket) => {
                 attackerLosses,
                 defenderLosses,
                 provinceConquered: false,
-                autoMoved: false,
+                autoMoved: defenderAutoMoved,
                 // Campi specifici per conquista del difensore
                 defenderConqueredAttackerProvince: true,
                 defenderAutoMoved,
@@ -562,6 +565,23 @@ io.on("connection", (socket) => {
 
             checkVictoryCondition(room, roomId);
             removeDefeatedPlayers(room, roomId, io);
+
+            // Emetti le truppe aggiornate per entrambi i giocatori
+            const troopsTotals = getTroopsTotalByOwner(room);
+            const attackerSocket = io.sockets.sockets.get(battle.attackerSocketId);
+            const defenderSocket = io.sockets.sockets.get(battle.defenderSocketId);
+            if (attackerSocket) {
+                attackerSocket.emit("player_troops_updated", { 
+                    playerName: battle.attackerName, 
+                    troopsRemaining: troopsTotals[battle.attackerName] || 0 
+                });
+            }
+            if (defenderSocket) {
+                defenderSocket.emit("player_troops_updated", { 
+                    playerName: battle.defenderName, 
+                    troopsRemaining: troopsTotals[battle.defenderName] || 0 
+                });
+            }
 
             if (!defenderAutoMoved) {
                 // Salva per il confirm dello spostamento truppe del difensore
@@ -584,11 +604,11 @@ io.on("connection", (socket) => {
 
         if (provinceConquered) {
             defender.owner = attackerPlayer.name;
-            defender.troops = 0;
 
             if (attacker.troops <= 1) {
-                // Movimento automatico: 1 truppa va nella nuova provincia
+                // Movimento automatico: l'unica truppa viene piazzata nella nuova provincia
                 attacker.troops = 0;
+                attacker.owner = null;
                 defender.troops = 1;
 
                 io.to(roomId).emit("attack_result", {
@@ -611,7 +631,7 @@ io.on("connection", (socket) => {
                 io.to(roomId).emit("province_updated", {
                     provinceId: battle.fromProvinceId,
                     troops: attacker.troops,
-                    ownerName: attacker.owner
+                    ownerName: null
                 });
                 io.to(roomId).emit("province_updated", {
                     provinceId: battle.toProvinceId,
@@ -625,9 +645,16 @@ io.on("connection", (socket) => {
                 return;
             }
 
-            // Slider spostamento truppe attaccante
-            const minMovable = 1;
-            const maxMovable = attacker.troops - 1;
+            // Spostamento minimo automatico: lascia almeno 1 truppa nella provincia originaria e 1 nella provincia conquistata
+            defender.troops = 1;
+            attacker.troops -= 1;
+            const minMovable = 0;
+            const maxMovable = Math.max(0, attacker.troops - 1);
+            const attackerAutoMoved = maxMovable === 0;
+
+            if (attacker.troops === 0) {
+                attacker.owner = null;
+            }
 
             io.to(roomId).emit("attack_result", {
                 winner: "attacker",
@@ -640,7 +667,7 @@ io.on("connection", (socket) => {
                 attackerLosses,
                 defenderLosses,
                 provinceConquered: true,
-                autoMoved: false,
+                autoMoved: attackerAutoMoved,
                 maxMovableTroops: maxMovable,
                 minMovableTroops: minMovable,
                 defenderConqueredAttackerProvince: false,
@@ -653,19 +680,21 @@ io.on("connection", (socket) => {
             });
             io.to(roomId).emit("province_updated", {
                 provinceId: battle.toProvinceId,
-                troops: 0,
+                troops: defender.troops,
                 ownerName: attackerPlayer.name
             });
 
             checkVictoryCondition(room, roomId);
             removeDefeatedPlayers(room, roomId, io);
-            room.pendingTroopMove = {
-                fromProvinceId: battle.fromProvinceId,
-                toProvinceId: battle.toProvinceId,
-                attackerSocketId: battle.attackerSocketId,
-                minTroops: minMovable,
-                maxTroops: maxMovable,
-            };
+            if (!attackerAutoMoved) {
+                room.pendingTroopMove = {
+                    fromProvinceId: battle.fromProvinceId,
+                    toProvinceId: battle.toProvinceId,
+                    attackerSocketId: battle.attackerSocketId,
+                    minTroops: minMovable,
+                    maxTroops: maxMovable,
+                };
+            }
 
         } else {
             // Nessuna conquista: round normale
@@ -733,6 +762,13 @@ io.on("connection", (socket) => {
 
         checkVictoryCondition(room, roomId);
         removeDefeatedPlayers(room, roomId, io);
+
+        // Emetti le truppe aggiornate per tutti i giocatori
+        const troopsTotals = getTroopsTotalByOwner(room);
+        for (const [playerName, total] of Object.entries(troopsTotals)) {
+            io.to(roomId).emit("player_troops_updated", { playerName, troopsRemaining: total });
+        }
+
         room.pendingTroopMove = null;
     });
 
@@ -770,6 +806,13 @@ io.on("connection", (socket) => {
 
         checkVictoryCondition(room, roomId);
         removeDefeatedPlayers(room, roomId, io);
+
+        // Emetti le truppe aggiornate per tutti i giocatori
+        const troopsTotals = getTroopsTotalByOwner(room);
+        for (const [playerName, total] of Object.entries(troopsTotals)) {
+            io.to(roomId).emit("player_troops_updated", { playerName, troopsRemaining: total });
+        }
+
         room.pendingDefenderTroopMove = null;
     });
 
@@ -1071,6 +1114,16 @@ function getProvinceCountByOwner(room) {
         }
     }
     return count;
+}
+
+function getTroopsTotalByOwner(room) {
+    const total = {};
+    for (const province of Object.values(room.provinces || {})) {
+        if (province.owner && province.troops > 0) {
+            total[province.owner] = (total[province.owner] || 0) + province.troops;
+        }
+    }
+    return total;
 }
 
 function buildGameResults(room) {

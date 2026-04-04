@@ -148,7 +148,8 @@ socket.on("attack_result", ({
     attackerDices, defenderDices,
     attackerLosses, defenderLosses,
     provinceConquered, maxMovableTroops, minMovableTroops,
-    fromProvinceId, toProvinceId, autoMoved
+    fromProvinceId, toProvinceId, autoMoved,
+    defenderConqueredAttackerProvince, defenderAutoMoved, defenderMinMovable, defenderMaxMovable
 }) => {
     battleState.active = false;
     hideBattleModal();
@@ -157,7 +158,8 @@ socket.on("attack_result", ({
         attackerDices, defenderDices,
         attackerLosses, defenderLosses,
         provinceConquered, maxMovableTroops, minMovableTroops,
-        fromProvinceId, toProvinceId, autoMoved
+        fromProvinceId, toProvinceId, autoMoved,
+        defenderConqueredAttackerProvince, defenderAutoMoved, defenderMinMovable, defenderMaxMovable
     });
 });
 
@@ -664,10 +666,12 @@ function showAttackResult({
     attackerDices, defenderDices,
     attackerLosses, defenderLosses,
     provinceConquered, maxMovableTroops, minMovableTroops,
-    fromProvinceId, toProvinceId, autoMoved = false
+    fromProvinceId, toProvinceId, autoMoved = false,
+    defenderConqueredAttackerProvince = false, defenderAutoMoved = false, defenderMinMovable = 0, defenderMaxMovable = 0
 }) {
     const myName = sessionStorage.getItem("playerName");
     const isAttacker = myName === attackerName;
+    const isDefender = myName === defenderName;
 
     const result = document.createElement("div");
     result.id = "attack-result-modal";
@@ -754,6 +758,37 @@ ${provinceConquered && isAttacker && !autoMoved ? `
     <div style="margin-top:16px; color:#888; font-size:13px;">
         ${attackerName} is choosing how many troops to move...
     </div>
+` : defenderConqueredAttackerProvince && isDefender && !defenderAutoMoved ? `
+    <div style="margin-top:24px; border-top:1px solid #333; padding-top:20px;">
+        <div style="font-size:14px; color:#ccc; margin-bottom:12px;">
+            How many troops you want to move to the conquered province?
+        </div>
+        <div style="display:flex; align-items:center; gap:12px; justify-content:center; margin-bottom:8px;">
+            <span style="color:#888; font-size:13px;">${defenderMinMovable}</span>
+            <input type="range" id="defender-troop-move-slider"
+                   min="${defenderMinMovable}" max="${defenderMaxMovable}"
+                   value="${defenderMinMovable}"
+                   style="flex:1; accent-color:#4488ff;">
+            <span style="color:#888; font-size:13px;">${defenderMaxMovable}</span>
+        </div>
+        <div style="font-size:22px; font-weight:bold; color:#4488ff; margin-bottom:16px;">
+            <span id="defender-troop-move-value">${defenderMinMovable}</span> troops
+        </div>
+        <button id="confirm-defender-move-btn"
+            style="background:#4488ff; color:#fff; border:none; border-radius:8px;
+                   padding:12px 32px; font-size:15px; cursor:pointer;
+                   font-family:inherit; width:100%; font-weight:bold;">
+            Move Troops
+        </button>
+    </div>
+` : defenderConqueredAttackerProvince && isDefender && defenderAutoMoved ? `
+    <div style="margin-top:16px; color:#888; font-size:13px;">
+        You have moved your troops to the conquered province.
+    </div>
+` : defenderConqueredAttackerProvince ? `
+    <div style="margin-top:16px; color:#888; font-size:13px;">
+        ${defenderName} is choosing how many troops to move...
+    </div>
 ` : `
     <button id="close-result-btn"
         style="margin-top:20px; background:#2a2f3e; color:#ccc; border:1px solid #444;
@@ -767,7 +802,7 @@ ${provinceConquered && isAttacker && !autoMoved ? `
 
     document.body.appendChild(result);
 
-    // Slider
+    // Slider Attacker
     const slider = result.querySelector("#troop-move-slider");
     const valueEl = result.querySelector("#troop-move-value");
     if (slider) {
@@ -776,12 +811,31 @@ ${provinceConquered && isAttacker && !autoMoved ? `
         });
     }
 
-    // Conferma spostamento
+    // Slider Defender
+    const defenderSlider = result.querySelector("#defender-troop-move-slider");
+    const defenderValueEl = result.querySelector("#defender-troop-move-value");
+    if (defenderSlider) {
+        defenderSlider.addEventListener("input", () => {
+            defenderValueEl.textContent = defenderSlider.value;
+        });
+    }
+
+    // Conferma spostamento Attacker
     const confirmMoveBtn = result.querySelector("#confirm-move-btn");
     if (confirmMoveBtn) {
         confirmMoveBtn.addEventListener("click", () => {
             const troops = parseInt(slider.value);
             socket.emit("confirm_troop_move", { roomId: getRoomId(), troops });
+            result.remove();
+        });
+    }
+
+    // Conferma spostamento Defender
+    const confirmDefenderMoveBtn = result.querySelector("#confirm-defender-move-btn");
+    if (confirmDefenderMoveBtn) {
+        confirmDefenderMoveBtn.addEventListener("click", () => {
+            const troops = parseInt(defenderSlider.value);
+            socket.emit("confirm_defender_troop_move", { roomId: getRoomId(), troops });
             result.remove();
         });
     }
@@ -792,8 +846,10 @@ ${provinceConquered && isAttacker && !autoMoved ? `
         closeBtn.addEventListener("click", () => result.remove());
     }
 
-    // Chiusura automatica per tutti i casi tranne attaccante con conquista (deve scegliere truppe)
-    const needsInput = isAttacker && provinceConquered && !autoMoved;
+    // Chiusura automatica per tutti i casi tranne quando serve input dal giocatore
+    const attackerNeedsInput = isAttacker && provinceConquered && !autoMoved;
+    const defenderNeedsInput = isDefender && defenderConqueredAttackerProvince && !defenderAutoMoved;
+    const needsInput = attackerNeedsInput || defenderNeedsInput;
     if (!needsInput) {
         setTimeout(() => result.remove(), 4000);
     }
