@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="it">
+<html lang="en">
 
 <head>
     <meta charset="UTF-8">
@@ -33,34 +33,34 @@
 
             <div class="modal-sword">⚔</div>
 
-            <h2 class="modal-title" id="modal-title">Ordine dei Turni</h2>
+            <h2 class="modal-title" id="modal-title">Turn Order</h2>
             <div class="modal-divider"></div>
             <p class="modal-desc" id="modal-desc">
-                Tira il dado per determinare chi inizia.<br>Il punteggio più alto va per primo!
+                Roll the dice to determine who starts.<br>The highest score goes first!
             </p>
 
             <!-- Lista tiri -->
             <div id="dice-rolls-list" class="dice-rolls-list">
-                <div class="dice-rolls-empty">In attesa dei tiri...</div>
+                <div class="dice-rolls-empty">Waiting for rolls...</div>
             </div>
 
             <!-- Risultato proprio -->
             <div id="dice-result-display" class="dice-result-display" style="display:none;">
-                <span class="dice-result-label">Il tuo dado</span>
+                <span class="dice-result-label">Your dice</span>
                 <span class="dice-result-value" id="my-roll-value">—</span>
             </div>
 
             <!-- Bottone tiro -->
-            <button id="btn-roll-dice" class="btn btn-primary modal-btn">Tira il Dado</button>
+            <button id="btn-roll-dice" class="btn btn-primary modal-btn">Roll the Dice</button>
 
             <!-- Attesa altri -->
             <p id="waiting-msg" class="modal-waiting" style="display:none;">
-                In attesa degli altri giocatori...
+                Waiting for other players...
             </p>
 
             <!-- Countdown finale -->
             <div id="modal-countdown" class="modal-countdown" style="display:none;">
-                <span class="countdown-text">La partita inizia tra</span>
+                <span class="countdown-text">The game starts in</span>
                 <span class="countdown-number" id="modal-countdown-num">3</span>
                 <div class="countdown-track">
                     <div class="countdown-fill" id="modal-countdown-fill" style="width:100%"></div>
@@ -80,24 +80,24 @@
 
         <!-- ── PLAYER INFO PANEL ── -->
         <div id="player-panel">
-            <div class="pp-title">⚔ Comandante ⚔</div>
+            <div class="pp-title">⚔ Commander ⚔</div>
 
             <div class="pp-row">
-                <span class="pp-label">Nome</span>
+                <span class="pp-label">Name</span>
                 <span class="pp-value accent" id="pp-name"></span>
             </div>
 
             <div class="pp-divider"></div>
 
             <div class="pp-row">
-                <span class="pp-label">Continente</span>
+                <span class="pp-label">Continent</span>
                 <span class="pp-value" id="pp-continent"></span>
             </div>
 
             <div class="pp-divider"></div>
 
             <div class="pp-row">
-                <span class="pp-label">Truppe Totali</span>
+                <span class="pp-label">Total Troops</span>
                 <span class="pp-value" id="pp-troops"></span>
             </div>
 

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="it">
+<html lang="en">
 
 <head>
     <meta charset="UTF-8">
@@ -86,6 +86,11 @@
             background: rgba(34, 197, 94, 0.1);
         }
 
+        .ranking-item.defeated {
+            opacity: 0.6;
+            border-color: rgba(220, 38, 38, 0.2);
+        }
+
         .ranking-name {
             font-size: 1rem;
             font-weight: 700;
@@ -118,6 +123,11 @@
             background: rgba(220, 38, 38, 0.12);
         }
 
+        .ranking-result.eliminated {
+            color: #94a3b8;
+            background: rgba(100, 116, 139, 0.15);
+        }
+
         #victory-actions {
             display: flex;
             justify-content: center;
@@ -142,20 +152,19 @@
 
 <body>
     <div class="victory-box">
-        <h1>Classifica Finale</h1>
-        <div class="result-badge" id="result-badge">Attendi...</div>
-        <p class="victory-subtitle" id="result-reason">Stiamo caricando i risultati della partita...</p>
+        <h1>Final Ranking</h1>
+        <div class="result-badge" id="result-badge">Wait...</div>
+        <p class="victory-subtitle" id="result-reason">Loading game results...</p>
 
         <div class="ranking-list" id="ranking-list">
             <div class="ranking-item">
-                <div class="ranking-name">Caricamento...</div>
+                <div class="ranking-name">Loading...</div>
                 <div class="ranking-score">—</div>
             </div>
         </div>
 
         <div id="victory-actions">
-            <button class="btn-small" id="btn-home">Torna al menu</button>
-            <button class="btn-small" id="btn-replay">Ritorna alla stanza</button>
+            <button class="btn-small" id="btn-home">Back to Lobby</button>
         </div>
     </div>
 
@@ -169,66 +178,60 @@
         const resultBadge = document.getElementById('result-badge');
         const resultReason = document.getElementById('result-reason');
         const btnHome = document.getElementById('btn-home');
-        const btnReplay = document.getElementById('btn-replay');
 
         btnHome.addEventListener('click', () => {
             sessionStorage.removeItem(storageKey);
             window.location.href = '/view/action.html';
         });
 
-        btnReplay.addEventListener('click', () => {
-            if (roomId) {
-                window.location.href = `/view/room.html?id=${encodeURIComponent(roomId)}`;
-            }
-        });
-
         function renderResults(data) {
             if (!data || !Array.isArray(data.results.players)) {
-                resultBadge.textContent = 'Errore';
-                resultReason.textContent = 'Impossibile caricare la classifica della partita.';
+                resultBadge.textContent = 'Error';
+                resultReason.textContent = 'Unable to load the game ranking.';
                 rankingList.innerHTML = '';
                 return;
             }
 
             const players = data.results.players;
             if (players.length === 0) {
-                resultBadge.textContent = 'Nessun risultato';
-                resultReason.textContent = 'Non ci sono giocatori validi per questa partita.';
+                resultBadge.textContent = 'No results';
+                resultReason.textContent = 'There are no valid players for this game.';
                 rankingList.innerHTML = '';
                 return;
             }
 
-            const bestScore = players[0].provinces;
+            const reason = data.results.reason;
             const currentName = sessionStorage.getItem('playerName');
-            const isWinner = currentName ? players.some(player => player.name === currentName && player.provinces === bestScore) : false;
-            const winnerNames = players.filter(player => player.provinces === bestScore).map(p => p.name);
-            const title = winnerNames.length > 1 ? 'Vittoria condivisa' : 'Vittoria';
 
-            if (isWinner) {
-                resultBadge.textContent = title;
-                resultBadge.classList.add('win');
-                resultBadge.classList.remove('lose');
-                resultReason.textContent = `Hai dominato la partita con ${bestScore} regioni conquistate.`;
+            // Determine if current player won
+            // players[0] is always the top-ranked
+            const isWinner = currentName && players[0]?.name === currentName;
+
+            if (reason === 'conquest') {
+                resultBadge.textContent = isWinner ? 'Vittoria!' : 'Sconfitta';
+                if (isWinner) resultBadge.classList.add('win');
+                resultReason.textContent = reason === 'conquest'
+                    ? `${players[0].name} ha conquistato tutte le regioni!`
+                    : '';
             } else {
-                resultBadge.textContent = 'Sconfitta';
-                resultBadge.classList.add('lose');
-                resultBadge.classList.remove('win');
-                resultReason.textContent = `Il vincitore ha conquistato ${bestScore} regioni. Torna e prova ancora!`;
-            }
-
-            if (data.results.reason === 'conquest') {
-                resultReason.textContent += ' Vittoria a tavolino: un giocatore ha conquistato tutte le regioni.';
-            } else if (data.results.reason === 'time') {
-                resultReason.textContent += ' La partita è terminata al termine dei 20 minuti.';
+                // time
+                resultBadge.textContent = 'Fine Tempo';
+                resultReason.textContent = 'La partita è terminata allo scadere del tempo.';
             }
 
             rankingList.innerHTML = '';
+            const medals = ['🥇', '🥈', '🥉', '4️⃣'];
+
             players.forEach((player, index) => {
                 const item = document.createElement('div');
-                item.className = `ranking-item ${index === 0 ? 'top' : ''}`;
+                const isTop = index === 0;
+                const isEliminated = player.defeatedAt !== null && player.defeatedAt !== undefined;
+                item.className = `ranking-item${isTop ? ' top' : ''}${isEliminated ? ' defeated' : ''}`;
+
                 const label = document.createElement('div');
                 label.className = 'ranking-name';
-                label.textContent = `${index + 1}. ${player.name}`;
+                const isMe = currentName && player.name === currentName;
+                label.textContent = `${medals[index] || (index + 1) + '.'} ${player.name}${isMe ? ' (tu)' : ''}`;
 
                 const meta = document.createElement('div');
                 meta.style.display = 'flex';
@@ -237,11 +240,31 @@
 
                 const score = document.createElement('div');
                 score.className = 'ranking-score';
-                score.textContent = `${player.provinces} regioni`;
+
+                if (isEliminated) {
+                    score.textContent = 'Eliminato';
+                } else {
+                    score.textContent = `${player.provinces} region${player.provinces !== 1 ? 'i' : 'e'}`;
+                }
 
                 const status = document.createElement('div');
-                status.className = `ranking-result ${player.provinces === bestScore ? 'win' : 'lose'}`;
-                status.textContent = player.provinces === bestScore ? 'Vittoria' : 'Sconfitta';
+
+                if (isEliminated) {
+                    status.className = 'ranking-result eliminated';
+                    status.textContent = 'Eliminato';
+                } else if (reason === 'conquest' && isTop) {
+                    status.className = 'ranking-result win';
+                    status.textContent = 'Vittoria';
+                } else if (reason === 'time') {
+                    // For time-based: show position only, no win/lose label
+                    status.className = 'ranking-result';
+                    status.style.color = '#94a3b8';
+                    status.style.background = 'rgba(100,116,139,0.1)';
+                    status.textContent = `${index + 1}° posto`;
+                } else {
+                    status.className = 'ranking-result lose';
+                    status.textContent = 'Sconfitta';
+                }
 
                 meta.appendChild(score);
                 meta.appendChild(status);

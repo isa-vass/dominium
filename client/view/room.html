@@ -1,11 +1,20 @@
 <!DOCTYPE html>
-<html lang="it">
+<html lang="en">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dominium – Stanza</title>
+    <title>Dominium – Room</title>
     <link rel="stylesheet" href="../css/style.css">
+    <style>
+        .name-error {
+            color: #ff4444;
+            font-size: 0.9rem;
+            margin-top: 8px;
+            min-height: 20px;
+            display: none;
+        }
+    </style>
 </head>
 
 <body>
@@ -15,7 +24,8 @@
         </div>
         <div class="button-group vertical">
             <label class="join-label">What's your name, comrade?</label>
-            <input class="join-input" id="name-input" type="text" placeholder="Il tuo nome..." maxlength="20" autocomplete="off" />
+            <input class="join-input" id="name-input" type="text" placeholder="Your name..." maxlength="20" autocomplete="off" />
+            <div class="name-error" id="name-error">This name is already in use. Choose another.</div>
             <button class="btn btn-ready" id="btn-confirm" style="display:none;">JOIN ⚔</button>
         </div>
     </div>
@@ -56,7 +66,7 @@
                                 <path d="M10 35 Q30 25 50 35 Q70 45 90 30" stroke="#ff4444" stroke-width="1.5" fill="none" />
                                 <circle cx="50" cy="30" r="3" fill="#ff4444" />
                             </svg>
-                            <p>Mappa — Work in Progress</p>
+                            <p>Map — Work in Progress</p>
                         </div>
                     </div>
                 </div>
@@ -106,38 +116,57 @@
         const roomId = params.get("id") || sessionStorage.getItem("roomId");
         const roomCode = sessionStorage.getItem("roomCode");
 
-        // Rejoin immediato (solo se già nella stanza, ma ora il nome è obbligatorio prima)
         socket.on("connect", () => {
-            // Non emettere rejoin_room qui, poiché il nome deve essere confermato prima
+            // No rejoin until name is confirmed
         });
 
-        const nameInput  = document.getElementById("name-input");
-        const btnConfirm = document.getElementById("btn-confirm");
+        const nameInput   = document.getElementById("name-input");
+        const btnConfirm  = document.getElementById("btn-confirm");
+        const nameError   = document.getElementById("name-error");
 
         nameInput.addEventListener("input", () => {
+            // Show confirm button as soon as there's text; also clear any previous error
             btnConfirm.style.display = nameInput.value.trim() ? "block" : "none";
+            nameError.style.display = "none";
+            nameInput.style.borderColor = "";
         });
 
         nameInput.addEventListener("keydown", (e) => {
-            if (e.key === "Enter") confirmName(roomId);
+            if (e.key === "Enter") attemptConfirmName();
         });
 
-        btnConfirm.addEventListener("click", () => confirmName(roomId));
+        btnConfirm.addEventListener("click", () => attemptConfirmName());
 
-        // Modifica confirmName per emettere set_name e cambiare UI
-        function confirmName(roomId) {
+        function attemptConfirmName() {
             const name = nameInput.value.trim();
-            if (!name) return; // Non procedere se il nome è vuoto
-
-            socket.emit("set_name", name); // Imposta il nome obbligatorio
-            document.getElementById("name-container").style.display = "none";
-            document.getElementById("room-container").style.display = "block";
-            initRoom(roomId);
+            if (!name) return;
+            btnConfirm.disabled = true;
+            nameError.style.display = "none";
+            nameInput.style.borderColor = "";
+            socket.emit("set_name", name);
+            // Wait for server: name_ok proceeds, name_taken blocks
         }
 
-        // Socket events (invariati)
+        // Server confirmed name is free — proceed to room
+        socket.on("name_ok", () => {
+            document.getElementById("name-container").style.display = "none";
+            document.getElementById("room-container").style.display = "block";
+            btnConfirm.disabled = false;
+            initRoom(roomId);
+        });
+
+        // Server says name is taken — stay on name screen
+        socket.on("name_taken", () => {
+            nameError.style.display = "block";
+            nameInput.style.borderColor = "#ff4444";
+            nameInput.focus();
+            nameInput.select();
+            btnConfirm.disabled = false;
+        });
+
+        // Socket events
         socket.on("rejoined", ({ roomId }) => {
-            console.log(`Rejoined stanza ${roomId}`);
+            console.log(`Rejoined room ${roomId}`);
         });
 
         socket.on("players_updated", ({ players }) => renderPlayers(players));

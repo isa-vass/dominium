@@ -15,7 +15,7 @@ let troopsToPlace = 0;
 let placementPhase = false;
 let pendingTroops = null;
 
-let myRoll = null; // Variabile per memorizzare il roll del giocatore
+let myRoll = null;
 
 let turnCounter = 1;
 
@@ -23,7 +23,7 @@ let isTroopRoll = false;
 
 let battleState = {
     active: false,
-    role: null, // "attacker" | "defender" | "spectator"
+    role: null,
     maxDice: 0,
     selectedDice: [],
 };
@@ -37,10 +37,10 @@ const continentColors = {
     'Union of Arstotzka': '#ffb3c6'
 };
 
-// Tu stesso, subito
+// Tu stesso
 players.set(socket.id, {
-    name: sessionStorage.getItem("playerName") || "Giocatore",
-    continent: sessionStorage.getItem("playerContinent") || "Nessun Continente",
+    name: sessionStorage.getItem("playerName") || "Player",
+    continent: sessionStorage.getItem("playerContinent") || "No Continent",
     troops: 0,
     roll: null,
     ready: false
@@ -48,14 +48,16 @@ players.set(socket.id, {
 
 let provinces = {};
 
+// Map: provinceId -> ownerName (live, updated during game)
+let provinceOwners = {};
+// Map: ownerName -> continentName
+let playerContinentMap = {};
+
 socket.on("provinces_data", (data) => {
     provinces = data;
-    // ora puoi inizializzare i listener delle province
     initMap();
 });
 
-
-// Gli altri, quando arriva l'evento dal server
 socket.on("players_updated", ({ players: serverPlayers }) => {
     serverPlayers.forEach(p => {
         players.set(p.id, {
@@ -70,11 +72,9 @@ socket.on("players_updated", ({ players: serverPlayers }) => {
 
 console.log("game_logic.js loaded, btnRoll:", btnRoll, "socket:", socket);
 
-// Flag per evitare il loop infinito della roll UI
 let gameHasStarted = false;
 
-// Imposta l'info panel
-const playerName = sessionStorage.getItem("playerName") || "Giocatore";
+const playerName = sessionStorage.getItem("playerName") || "Player";
 console.log("playerName from storage:", playerName);
 document.getElementById("pp-name").textContent = playerName;
 
@@ -83,7 +83,6 @@ document.getElementById("pp-continent").textContent = playerContinent;
 
 applyPlayerColor(playerContinent);
 
-// Controlla se il gioco è già iniziato (persiste tra reload)
 const gameAlreadyStarted = sessionStorage.getItem("gameStarted") === "true";
 if (gameAlreadyStarted) {
     console.log("[game_logic] Game already started, skipping dice modal.");
@@ -91,12 +90,8 @@ if (gameAlreadyStarted) {
     hideModal();
 }
 
-
-// Rejoin room se necessario
 const roomIdFromUrl = new URLSearchParams(window.location.search).get("id");
 const roomId = roomIdFromUrl || sessionStorage.getItem("roomId");
-
-// Controlla lo stato dei turni al caricamento della pagina
 
 if (roomId && socket.connected) {
     checkGameState();
@@ -108,7 +103,6 @@ if (roomId && socket.connected) {
     });
 }
 
-// Il server ci chiede di tirare i dadi per la battaglia
 socket.on("battle_roll_request", ({
     role, maxDice, attackerName, defenderName,
     fromProvinceId, toProvinceId, attackerTroops, defenderTroops
@@ -120,7 +114,6 @@ socket.on("battle_roll_request", ({
     });
 });
 
-// Notifica che un giocatore ha tirato (senza rivelare i dadi)
 socket.on("battle_player_rolled", ({ role, name }) => {
     const el = document.getElementById(`battle-rolled-${role}`);
     if (el) {
@@ -129,11 +122,10 @@ socket.on("battle_player_rolled", ({ role, name }) => {
     }
 });
 
-// Spettatori: mostra che una battaglia è iniziata
 socket.on("battle_started", ({ attackerName, defenderName, fromProvinceId, toProvinceId }) => {
-    if (battleState.active) return; // già nel modal
+    if (battleState.active) return;
     const banner = document.getElementById("turn-banner");
-    banner.textContent = `⚔ ${attackerName.toUpperCase()} attacca ${defenderName.toUpperCase()}!`;
+    banner.textContent = `⚔ ${attackerName.toUpperCase()} attacks ${defenderName.toUpperCase()}!`;
     banner.style.display = "block";
     banner.style.opacity = "1";
     setTimeout(() => {
@@ -142,7 +134,6 @@ socket.on("battle_started", ({ attackerName, defenderName, fromProvinceId, toPro
     }, 3000);
 });
 
-// Risultato con slider se conquista
 socket.on("attack_result", ({
     winner, attackerName, defenderName,
     attackerDices, defenderDices,
@@ -163,7 +154,6 @@ socket.on("attack_result", ({
     });
 });
 
-// Listener per lo stato dei turni
 socket.on("turn_order_status", ({ isDecided, turnOrder }) => {
     console.log("[turn_order_status] isDecided:", isDecided, "turnOrder:", turnOrder);
     if (isDecided && !gameHasStarted) {
@@ -173,7 +163,6 @@ socket.on("turn_order_status", ({ isDecided, turnOrder }) => {
     }
 });
 
-// Mostra il modal solo se il gioco non è iniziato
 if (!gameHasStarted) {
     showModal();
 }
@@ -193,7 +182,6 @@ btnRoll.addEventListener("click", () => {
         myRollValue.textContent = roll;
 
     } else if (btnRoll._isTieRoll) {
-        // ── re-roll per il pareggio ──
         btnRoll._isTieRoll = false;
         socket.emit("roll_for_tie", { roomId: rId });
         diceResultDisplay.style.display = "block";
@@ -206,7 +194,6 @@ btnRoll.addEventListener("click", () => {
     }
 });
 
-// Aggiorna la lista quando un giocatore tira
 socket.on("player_rolled", ({ socketId, name, roll }) => {
     let row = document.getElementById(`roll-${socketId}`);
     if (!row) {
@@ -224,7 +211,6 @@ socket.on("player_rolled", ({ socketId, name, roll }) => {
         </div>
     `;
 
-    // Riordina la lista in ordine decrescente in tempo reale
     const rows = Array.from(diceRollsList.querySelectorAll(".dice-roll-row"));
     rows.sort((a, b) => {
         const rollA = parseInt(a.querySelector(".dice-face")?.textContent || "0");
@@ -235,14 +221,13 @@ socket.on("player_rolled", ({ socketId, name, roll }) => {
     rows.forEach(r => diceRollsList.appendChild(r));
 
     if (isMe) {
-        myRoll = roll; // Memorizza il roll per riutilizzo
+        myRoll = roll;
         diceResultDisplay.style.display = "block";
         myRollValue.textContent = roll;
         waitingMsg.style.display = "block";
     }
 });
 
-// Listener per roll truppe
 socket.on("player_troop_rolled", ({ socketId, name, roll }) => {
     let row = document.getElementById(`troop-roll-${socketId}`);
     if (!row) {
@@ -268,10 +253,14 @@ socket.on("player_troop_rolled", ({ socketId, name, roll }) => {
     }
 });
 
-// Ordine finale deciso
 socket.on("turn_order_decided", ({ turnOrder, playerContinents }) => {
 
     window._turnOrderDetails = turnOrder;
+
+    // Build playerContinentMap from turnOrder details
+    turnOrder.forEach(p => {
+        playerContinentMap[p.name] = p.continent;
+    });
 
     console.log("[turn_order_decided] playerContinents full:", playerContinents);
     const myContinent = playerContinents[socket.id];
@@ -280,7 +269,6 @@ socket.on("turn_order_decided", ({ turnOrder, playerContinents }) => {
     if (!myContinent) {
         console.warn("[turn_order_decided] continent missing for socket:", socket.id);
     }
-    // (opzionale) fallback:
     const continentToShow = myContinent || "no continent";
     document.getElementById("pp-continent").textContent = continentToShow;
 
@@ -293,7 +281,6 @@ socket.on("turn_order_decided", ({ turnOrder, playerContinents }) => {
 
         applyPlayerColor(myEntry.continent);
 
-        // Salva il continente in sessionStorage per uso successivo
         sessionStorage.setItem("playerContinent", myEntry.continent);
         sessionStorage.setItem("playerName", myEntry.name);
         sessionStorage.setItem("playerTroops", myEntry.troops);
@@ -308,7 +295,7 @@ socket.on("turn_order_decided", ({ turnOrder, playerContinents }) => {
     turnOrder.forEach((player, index) => {
         const row = document.createElement("div");
         row.classList.add("dice-roll-row", "final");
-        const medals = ["🥇", "🥈", "🥉"]; //da levare / cambiare 
+        const medals = ["🥇", "🥈", "🥉"];
         const medal = medals[index] || `${index + 1}.`;
         const isMe = player.socketId === socket.id;
         row.innerHTML = `
@@ -355,8 +342,8 @@ socket.on("turn", ({ currentPlayerId, turnOrder }) => {
     document.querySelectorAll(".player-item").forEach(item => {
         const nameEl = item.querySelector(".player-name");
         if (!nameEl) return;
-        const playerName = nameEl.textContent.replace(" (you)", "");
-        const isActive = playerName === turnOrder.find(p => p.socketId === currentPlayerId)?.name;
+        const pName = nameEl.textContent.replace(" (you)", "");
+        const isActive = pName === turnOrder.find(p => p.socketId === currentPlayerId)?.name;
         item.classList.toggle("active-turn", isActive);
     });
 
@@ -368,7 +355,6 @@ socket.on("turn", ({ currentPlayerId, turnOrder }) => {
         btnEnd.style.display = "block";
         enableGameControls();
     } else {
-        // NUOVO: mostra di chi è il turno
         const currentName = turnOrder.find(p => p.socketId === currentPlayerId)?.name || "...";
         banner.textContent = `⚔ IT'S ${currentName.toUpperCase()}'S TURN ⚔`;
         banner.style.display = "block";
@@ -382,7 +368,6 @@ socket.on("turn", ({ currentPlayerId, turnOrder }) => {
     }
 });
 
-// Quando il giocatore finisce il suo turno
 document.getElementById("btn-end-turn").addEventListener("click", () => {
     socket.emit("end_turn", { roomId });
     turnCounter++;
@@ -403,21 +388,29 @@ socket.on("battle_result", ({ winner }) => {
 
 socket.on("placement_start", ({ troops }) => {
     console.log("[placement_start] received, troops:", troops, "overlay display:", overlay.style.display);
-    isTroopRoll = false; // reset
-    hideModal(); // Close the modal always
-    // Hide the End Turn button during placement
+    isTroopRoll = false;
+    hideModal();
     document.getElementById("btn-end-turn").style.display = "none";
     applyPlacementStart(troops);
 });
 
-socket.on("province_updated", ({ provinceId, troops, ownerName }) => {
+socket.on("province_updated", ({ provinceId, troops, ownerName, noMansLand }) => {
     provinces[provinceId].troops = troops;
     provinces[provinceId].owner = ownerName;
-    updateTroopMarker(provinceId, troops, ownerName);
+    provinces[provinceId].noMansLand = noMansLand || false;
+
+    // Track live ownership for tooltip
+    if (ownerName) {
+        provinceOwners[provinceId] = ownerName;
+    } else {
+        delete provinceOwners[provinceId];
+    }
+
+    updateTroopMarker(provinceId, troops, ownerName, noMansLand);
 });
 
 socket.on("troops_remaining", ({ troopsToPlaceLeft }) => {
-    troopsToPlace = troopsToPlaceLeft;
+    troopsToPlace = Math.max(0, troopsToPlaceLeft);
     troopsToPlaceEl.textContent = troopsToPlace;
     if (troopsToPlace <= 0) {
         placementBanner.style.display = "none";
@@ -441,41 +434,86 @@ socket.on("placement_complete", () => {
     setTimeout(() => { banner.style.display = "none"; }, 500);
 });
 
+// Track if this player is spectating (defeated but still watching)
+let isSpectating = false;
+
 socket.on("defeated", ({ roomId }) => {
-    // Mostra messaggio di sconfitta
+    isSpectating = false; // not yet spectating, showing the choice
+
     const banner = document.getElementById("turn-banner");
-    banner.textContent = "SEI STATO SCONFITTO! Puoi spectare o abbandonare.";
+    banner.textContent = "YOU HAVE BEEN DEFEATED! You can spectate or leave.";
     banner.style.display = "block";
     banner.style.opacity = "1";
     banner.style.background = "rgba(220, 38, 38, 0.9)";
-    // Disabilita azioni del giocatore
+
     document.getElementById("btn-end-turn").style.display = "none";
-    // Aggiungi pulsanti per spectare o abbandonare
+
     const actionsDiv = document.createElement("div");
     actionsDiv.id = "defeated-actions";
-    actionsDiv.style.position = "fixed";
-    actionsDiv.style.top = "50%";
-    actionsDiv.style.left = "50%";
-    actionsDiv.style.transform = "translate(-50%, -50%)";
-    actionsDiv.style.background = "rgba(0,0,0,0.9)";
-    actionsDiv.style.padding = "20px";
-    actionsDiv.style.borderRadius = "10px";
-    actionsDiv.style.textAlign = "center";
+    actionsDiv.style.cssText = `
+        position: fixed; top: 50%; left: 50%;
+        transform: translate(-50%, -50%);
+        background: rgba(0,0,0,0.9); padding: 20px;
+        border-radius: 10px; text-align: center; z-index: 600;
+    `;
     actionsDiv.innerHTML = `
-        <h2 style="color: #ff4444;">Sei stato sconfitto!</h2>
-        <p style="color: #fff;">Hai perso tutte le tue terre.</p>
-        <button id="btn-spectate" style="margin: 10px; padding: 10px 20px; background: #444; color: #fff; border: none; border-radius: 5px; cursor: pointer;">Specta</button>
-        <button id="btn-leave" style="margin: 10px; padding: 10px 20px; background: #844; color: #fff; border: none; border-radius: 5px; cursor: pointer;">Abbandona</button>
+        <h2 style="color: #ff4444;">You have been defeated!</h2>
+        <p style="color: #fff; margin: 10px 0;">You have lost all your lands.</p>
+        <button id="btn-spectate" style="margin: 10px; padding: 10px 20px; background: #444; color: #fff; border: none; border-radius: 5px; cursor: pointer;">Spectate</button>
+        <button id="btn-leave-defeated" style="margin: 10px; padding: 10px 20px; background: #844; color: #fff; border: none; border-radius: 5px; cursor: pointer;">Leave</button>
     `;
     document.body.appendChild(actionsDiv);
+
     document.getElementById("btn-spectate").addEventListener("click", () => {
         actionsDiv.remove();
+        isSpectating = true;
         banner.textContent = "Stai spectando la partita...";
+        banner.style.opacity = "1";
+        setTimeout(() => {
+            banner.style.opacity = "0";
+            setTimeout(() => { banner.style.display = "none"; }, 500);
+        }, 2000);
+
+        // Show persistent leave button for spectators
+        showSpectatorLeaveButton();
     });
-    document.getElementById("btn-leave").addEventListener("click", () => {
+
+    document.getElementById("btn-leave-defeated").addEventListener("click", () => {
         window.location.href = "/view/action.html";
     });
 });
+
+function showSpectatorLeaveButton() {
+    // Remove if already exists
+    const existing = document.getElementById("spectator-leave-btn");
+    if (existing) existing.remove();
+
+    const btn = document.createElement("button");
+    btn.id = "spectator-leave-btn";
+    btn.textContent = "Leave";
+    btn.style.cssText = `
+        position: fixed;
+        bottom: 24px;
+        right: 24px;
+        z-index: 700;
+        padding: 12px 28px;
+        background: linear-gradient(135deg, #8b0000 0%, #cc0000 100%);
+        color: #fff;
+        border: 2px solid #ff4444;
+        border-radius: 10px;
+        font-size: 15px;
+        font-weight: 700;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+        cursor: pointer;
+        font-family: inherit;
+        box-shadow: 0 4px 20px rgba(255,68,68,0.3);
+    `;
+    btn.addEventListener("click", () => {
+        window.location.href = "/view/action.html";
+    });
+    document.body.appendChild(btn);
+}
 
 socket.on("game_over", ({ roomId: resultRoomId, results }) => {
     if (!results) return;
@@ -483,7 +521,6 @@ socket.on("game_over", ({ roomId: resultRoomId, results }) => {
     window.location.href = `/view/victory.html?id=${encodeURIComponent(resultRoomId)}`;
 });
 
-// Aggiorna le truppe totali quando cambiano (solo durante attacchi/battaglia)
 socket.on("player_troops_updated", ({ playerName, troopsRemaining }) => {
     const currentName = sessionStorage.getItem("playerName");
     if (playerName === currentName) {
@@ -495,7 +532,6 @@ socket.on("tie_detected", ({ tiedPlayers, tiedRoll, allRolls }) => {
     const amITied = tiedPlayers.some(p => p.socketId === socket.id);
     const tiedNames = tiedPlayers.map(p => p.name).join(" e ");
 
-    // Aggiorna la lista mostrando tutti i roll precedenti
     diceRollsList.innerHTML = "";
     for (const [socketId, { name, roll }] of Object.entries(allRolls)) {
         const row = document.createElement("div");
@@ -513,7 +549,6 @@ socket.on("tie_detected", ({ tiedPlayers, tiedRoll, allRolls }) => {
         diceRollsList.appendChild(row);
     }
 
-    // Titolo e descrizione
     modalTitle.textContent = `⚔ TIE! (${tiedRoll})`;
     diceResultDisplay.style.display = "none";
     waitingMsg.style.display = "none";
@@ -523,8 +558,6 @@ socket.on("tie_detected", ({ tiedPlayers, tiedRoll, allRolls }) => {
         btnRoll.disabled = false;
         btnRoll.textContent = "Roll the Dice for the Tie-breaker";
         btnRoll.style.display = "block";
-
-        // Cambia temporaneamente il comportamento del bottone
         btnRoll._isTieRoll = true;
     } else {
         modalDesc.textContent = `Tie between ${tiedNames}! Waiting for their re-roll...`;
@@ -542,7 +575,6 @@ socket.on("troop_roll_start", () => {
     const countdownEl = document.getElementById("modal-countdown");
     if (countdownEl) countdownEl.style.display = "none";
 
-    // Banner flash per tutti
     const banner = document.getElementById("turn-banner");
     banner.textContent = "⚔ NEW TROOP ROLL ⚔";
     banner.style.display = "block";
@@ -552,7 +584,6 @@ socket.on("troop_roll_start", () => {
         setTimeout(() => { banner.style.display = "none"; }, 500);
     }, 2000);
 
-    // Modal dado — uguale per tutti, nessun pareggio
     modalTitle.textContent = "Roll for the Troops!";
     modalDesc.textContent = "Roll the dice to receive new troops!";
     diceRollsList.innerHTML = "";
@@ -634,10 +665,8 @@ function showBattleModal({ role, maxDice, attackerName, defenderName, attackerTr
     const rollBtn = modal.querySelector("#battle-roll-btn");
 
     rollBtn.addEventListener("click", () => {
-        // Tira i dadi
         const rolledValues = Array.from({ length: maxDice }, () => Math.floor(Math.random() * 6) + 1);
 
-        // Mostra i valori
         dice.forEach((die, i) => {
             die.textContent = rolledValues[i];
             die.style.borderColor = "#a7c957";
@@ -648,7 +677,6 @@ function showBattleModal({ role, maxDice, attackerName, defenderName, attackerTr
         rollBtn.style.background = "#444";
         rollBtn.textContent = "Dadi tirati!";
 
-        // Invia automaticamente tutti i dadi tirati
         socket.emit("submit_battle_rolls", {
             roomId: getRoomId(),
             rolls: rolledValues
@@ -688,7 +716,6 @@ function showAttackResult({
             ? `⚔ ${attackerName} won the round!`
             : `🛡 ${defenderName} resisted!`;
 
-    // Crea le righe di confronto dadi
     const diceRows = attackerDices.map((d, i) => {
         const def = defenderDices[i];
         if (def === undefined) return "";
@@ -802,7 +829,6 @@ ${provinceConquered && isAttacker && !autoMoved ? `
 
     document.body.appendChild(result);
 
-    // Slider Attacker
     const slider = result.querySelector("#troop-move-slider");
     const valueEl = result.querySelector("#troop-move-value");
     if (slider) {
@@ -811,7 +837,6 @@ ${provinceConquered && isAttacker && !autoMoved ? `
         });
     }
 
-    // Slider Defender
     const defenderSlider = result.querySelector("#defender-troop-move-slider");
     const defenderValueEl = result.querySelector("#defender-troop-move-value");
     if (defenderSlider) {
@@ -820,7 +845,6 @@ ${provinceConquered && isAttacker && !autoMoved ? `
         });
     }
 
-    // Conferma spostamento Attacker
     const confirmMoveBtn = result.querySelector("#confirm-move-btn");
     if (confirmMoveBtn) {
         confirmMoveBtn.addEventListener("click", () => {
@@ -830,7 +854,6 @@ ${provinceConquered && isAttacker && !autoMoved ? `
         });
     }
 
-    // Conferma spostamento Defender
     const confirmDefenderMoveBtn = result.querySelector("#confirm-defender-move-btn");
     if (confirmDefenderMoveBtn) {
         confirmDefenderMoveBtn.addEventListener("click", () => {
@@ -840,13 +863,11 @@ ${provinceConquered && isAttacker && !autoMoved ? `
         });
     }
 
-    // Chiudi senza conquista
     const closeBtn = result.querySelector("#close-result-btn");
     if (closeBtn) {
         closeBtn.addEventListener("click", () => result.remove());
     }
 
-    // Chiusura automatica per tutti i casi tranne quando serve input dal giocatore
     const attackerNeedsInput = isAttacker && provinceConquered && !autoMoved;
     const defenderNeedsInput = isDefender && defenderConqueredAttackerProvince && !defenderAutoMoved;
     const needsInput = attackerNeedsInput || defenderNeedsInput;
@@ -909,7 +930,7 @@ function getRoomId() {
 
 function startGame(turnOrder) {
     gameHasStarted = true;
-    window._turnOrderDetails = turnOrder; 
+    window._turnOrderDetails = turnOrder;
     sessionStorage.setItem("gameStarted", "true");
     hideModal();
 
@@ -928,15 +949,32 @@ function initMap() {
         const el = document.getElementById(id);
         if (!el) return;
 
-        // Tooltip
         el.addEventListener('mouseenter', () => {
             const d = provinces[id];
-            const col = continentColors[d.continent] || '#fff';
+            const ownerName = provinceOwners[id] || d.owner || null;
+            const isNoMansLand = d.noMansLand || false;
+
+            let continentLabel;
+            let continentColor;
+
+            if (isNoMansLand) {
+                continentLabel = 'No Man\'s Land';
+                continentColor = '#888888';
+            } else if (ownerName && playerContinentMap[ownerName]) {
+                // Show the continent of the current owner
+                continentLabel = playerContinentMap[ownerName];
+                continentColor = continentColors[continentLabel] || '#fff';
+            } else {
+                // Fallback to original province continent (pre-game or unowned)
+                continentLabel = d.continent;
+                continentColor = continentColors[d.continent] || '#fff';
+            }
+
             tooltip.innerHTML = `
                 <div class="t-name">${d.name}</div>
-                <div class="t-state" style="color:${col}">${d.continent}</div>
-                <div class="t-row"><span class="t-label">Owner</span><span class="t-val">${d.owner || '—'}</span></div>
-                <div class="t-row"><span class="t-label">Troops</span><span class="t-val">${d.troops || 0}</span></div>
+                <div class="t-state" style="color:${continentColor}">${continentLabel}</div>
+                <div class="t-row"><span class="t-label">Owner</span><span class="t-val">${isNoMansLand ? 'No Man\'s Land' : (ownerName || '—')}</span></div>
+                <div class="t-row"><span class="t-label">Troops</span><span class="t-val">${isNoMansLand ? '—' : (d.troops || 0)}</span></div>
             `;
             tooltip.style.display = 'block';
         });
@@ -953,7 +991,6 @@ function initMap() {
             tooltip.style.display = 'none';
         });
 
-        // Click
         el.addEventListener('click', () => handleProvinceClick(id));
     });
 }
@@ -963,23 +1000,24 @@ function applyPlacementStart(troops) {
     troopsToPlace = troops;
     troopsToPlaceEl.textContent = troopsToPlace;
     placementBanner.style.display = "block";
-    turnMessage(turnCounter, true); 
+    turnMessage(turnCounter, true);
 }
 
-// stato locale dell'attacco
 let attackState = {
-    phase: null,           // null | "selecting_target"
+    phase: null,
     fromProvinceId: null,
     attackableIds: []
 };
 
 function handleProvinceClick(provinceId) {
 
-    // --- FASE PIAZZAMENTO ---
     if (placementPhase) {
         const province = provinces[provinceId];
         const myName = sessionStorage.getItem("playerName");
         const myContinent = sessionStorage.getItem("playerContinent");
+
+        // Cannot place on no-man's-land
+        if (province.noMansLand) return;
 
         const isMyContinent = province.continent === myContinent;
         const isConquered = province.owner === myName;
@@ -989,25 +1027,22 @@ function handleProvinceClick(provinceId) {
         socket.emit("place_troop", { provinceId, roomId: getRoomId() });
         return;
     }
-    // --- SOLO SE È IL MIO TURNO ---
+
     if (currentPlayer !== socket.id) return;
 
     const province = provinces[provinceId];
     const myName = sessionStorage.getItem("playerName");
 
-    // --- FASE 1: selezione provincia attaccante ---
     if (attackState.phase === null) {
-        // deve essere mia e avere almeno 2 truppe
         if (province.owner !== myName) return;
+        if (province.noMansLand) return;
         if ((province.troops || 0) < 1) return;
 
         attackState.fromProvinceId = provinceId;
         attackState.phase = "selecting_target";
 
-        // evidenzia la provincia selezionata
         document.getElementById(provinceId).classList.add("selected-attacker");
 
-        // chiedi al server le province attaccabili
         socket.emit("get_attackable_provinces", {
             provinceId,
             roomId: getRoomId()
@@ -1015,19 +1050,14 @@ function handleProvinceClick(provinceId) {
         return;
     }
 
-    // --- FASE 2: selezione bersaglio ---
     if (attackState.phase === "selecting_target") {
-
-        // click sulla stessa provincia = deseleziona
         if (provinceId === attackState.fromProvinceId) {
             resetAttackState();
             return;
         }
 
-        // click su una provincia non attaccabile = ignora
         if (!attackState.attackableIds.includes(provinceId)) return;
 
-        // attacca!
         socket.emit("attack", {
             fromProvinceId: attackState.fromProvinceId,
             toProvinceId: provinceId,
@@ -1038,15 +1068,13 @@ function handleProvinceClick(provinceId) {
     }
 }
 
-// ricevi le province attaccabili dal server e aggiorna la grafica
 socket.on("attackable_provinces", ({ fromProvinceId, attackable }) => {
     attackState.attackableIds = attackable;
 
-    // attenua tutte le province, poi evidenzia solo le attaccabili
     Object.keys(provinces).forEach(id => {
         const el = document.getElementById(id);
         if (!el) return;
-        if (id === fromProvinceId) return; // già con selected-attacker
+        if (id === fromProvinceId) return;
         if (attackable.includes(id)) {
             el.classList.add("attackable");
         } else {
@@ -1055,32 +1083,21 @@ socket.on("attackable_provinces", ({ fromProvinceId, attackable }) => {
     });
 });
 
-// Ricevi alert di attacco
 socket.on("under_attack", ({ attackerName, fromProvinceId, toProvinceId }) => {
     const alert = document.createElement("div");
     alert.style.cssText = `
-        position: fixed;
-        top: 50%;
-        left: 50%;
+        position: fixed; top: 50%; left: 50%;
         transform: translate(-50%, -50%);
         background: linear-gradient(135deg, #8b0000 0%, #ff0000 50%, #8b0000 100%);
-        color: white;
-        padding: 30px 50px;
-        border-radius: 15px;
-        z-index: 1000;
-        font-size: 24px;
-        font-weight: bold;
-        text-align: center;
+        color: white; padding: 30px 50px; border-radius: 15px;
+        z-index: 1000; font-size: 24px; font-weight: bold; text-align: center;
         box-shadow: 0 0 50px rgba(255, 0, 0, 0.8);
-        animation: pulse 0.5s ease-in-out;
     `;
     alert.textContent = `ATTACK! ${attackerName} is attacking you!`;
     document.body.appendChild(alert);
     setTimeout(() => alert.remove(), 3000);
 });
 
-
-// pulizia stato attacco
 function resetAttackState() {
     attackState.phase = null;
     attackState.fromProvinceId = null;
@@ -1091,20 +1108,21 @@ function resetAttackState() {
     });
 }
 
-function updateTroopMarker(provinceId, troops, ownerName) {
+function updateTroopMarker(provinceId, troops, ownerName, noMansLand = false) {
     const svgEl = document.querySelector("svg");
     const provinceEl = document.getElementById(provinceId);
     if (!provinceEl || !svgEl) return;
 
-    if (ownerName) {
-        // Trova il continente del proprietario dai turnOrderDetails
+    if (noMansLand) {
+        // Grey out the province visually
+        provinceEl.setAttribute("fill", "#4a4a4a");
+    } else if (ownerName) {
         const ownerEntry = window._turnOrderDetails?.find(p => p.name === ownerName);
         if (ownerEntry && continentColors[ownerEntry.continent]) {
             provinceEl.setAttribute("fill", continentColors[ownerEntry.continent]);
         }
     }
 
-    // Calcola il centro approssimativo della provincia dal bounding box
     const bbox = provinceEl.getBBox();
     const cx = bbox.x + bbox.width / 2;
     const cy = bbox.y + bbox.height / 2;
@@ -1113,7 +1131,6 @@ function updateTroopMarker(provinceId, troops, ownerName) {
     let marker = document.getElementById(markerId);
 
     if (!marker) {
-        // Crea il gruppo marker
         marker = document.createElementNS("http://www.w3.org/2000/svg", "g");
         marker.id = markerId;
 
@@ -1138,8 +1155,19 @@ function updateTroopMarker(provinceId, troops, ownerName) {
     }
 
     marker.setAttribute("transform", `translate(${cx}, ${cy})`);
-    marker.querySelector("text").textContent = troops;
-    marker.style.display = troops > 0 ? "block" : "none";
+
+    if (noMansLand) {
+        // Show "NML" text on no-man's-land provinces
+        marker.querySelector("circle").setAttribute("stroke", "#666");
+        marker.querySelector("text").textContent = "✕";
+        marker.querySelector("text").setAttribute("fill", "#888");
+        marker.style.display = "block";
+    } else {
+        marker.querySelector("circle").setAttribute("stroke", "#ff4444");
+        marker.querySelector("text").setAttribute("fill", "#ffffff");
+        marker.querySelector("text").textContent = troops;
+        marker.style.display = troops > 0 ? "block" : "none";
+    }
 }
 
 function showPlacementError(message) {

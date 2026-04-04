@@ -12,7 +12,7 @@ const borders = {
     "province-11": ["province-10", "province-12", "province-9", "province-8", "province-13", "province-14", "province-16"],
     "province-12": ["province-9", "province-11", "province-15", "province-16"],
     "province-13": ["province-3", "province-11", "province-14"],
-    "province-14": ["province-5", "province-13", "province-14", "province-16"],
+    "province-14": ["province-5","province-11", "province-13", "province-14", "province-16"],
     "province-15": ["province-12", "province-16"],
     "province-16": ["province-12", "province-14", "province-15", "province-11"]
 };

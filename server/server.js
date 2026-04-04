@@ -122,11 +122,27 @@ io.on("connection", (socket) => {
 
     socket.on("set_name", (name) => {
         if (!name || typeof name !== "string") return;
-        socket.request.session.userName = name.trim().substring(0, 20);
+        const trimmedName = name.trim().substring(0, 20);
+        const roomId = socket.request.session.roomId;
+        if (roomId) {
+            const room = rooms.get(roomId);
+            if (room) {
+                // Exclude current socket's own name when checking (e.g. re-setting same name)
+                const existingNames = room.players
+                    .filter(pid => pid !== socket.id)
+                    .map(pid => io.sockets.sockets.get(pid)?.request?.session?.userName)
+                    .filter(n => n);
+                if (existingNames.includes(trimmedName)) {
+                    socket.emit("name_taken");
+                    return;
+                }
+            }
+        }
+        socket.request.session.userName = trimmedName;
         socket.request.session.save(() => {
-            const roomId = socket.request.session.roomId;
             if (roomId) emitPlayersUpdated(roomId);
         });
+        socket.emit("name_ok");
     });
 
     socket.on("get_rooms", () => {
@@ -151,7 +167,8 @@ io.on("connection", (socket) => {
             gameTimerEnd: null,
             endGameTimeout: null,
             gameResults: null,
-            gameEnded: false
+            gameEnded: false,
+            defeatedOrder: [] // tracks elimination order: first = first eliminated
         });
         socket.join(roomId);
         socket.request.session.roomId = roomId;
@@ -260,7 +277,7 @@ io.on("connection", (socket) => {
                 room.isRollingForTroops = true;
                 room.gameStarted = true;
                 room.gameCountdown = null;
-                const gameDuration = 15 * 60; // 15 minutes in seconds
+                const gameDuration = 15 * 60;
                 room.gameTimerEnd = Date.now() + gameDuration * 1000;
                 room.endGameTimeout = setTimeout(() => concludeGame(roomId, "time"), gameDuration * 1000);
                 io.to(roomId).emit("game_timer_start", { endTime: room.gameTimerEnd, serverTime: Date.now() });
@@ -300,6 +317,7 @@ io.on("connection", (socket) => {
     socket.on("leave_room", ({ roomId }) => {
         const room = rooms.get(roomId);
         if (!room) return;
+        const wasCurrentPlayer = room.gameStarted && room.turnOrder && room.turnOrder[room.currentTurnIndex] === socket.id;
         room.players = room.players.filter(p => p !== socket.id);
         room.readyPlayers?.delete(socket.id);
         if (room.gameCountdown) {
@@ -311,6 +329,44 @@ io.on("connection", (socket) => {
             const leavingName = socket.request.session.userName;
             for (const [continent, name] of room.selectedContinents) {
                 if (name === leavingName) room.selectedContinents.delete(continent);
+            }
+        } else {
+            // During game: mark that player's provinces as no-man's-land (owner = null)
+            const leavingName = socket.request.session.userName;
+            if (room.provinces) {
+                for (const province of Object.values(room.provinces)) {
+                    if (province.owner === leavingName) {
+                        province.owner = null;
+                        province.noMansLand = true;
+                    }
+                }
+                // Emit updates for all affected provinces
+                for (const [provinceId, province] of Object.entries(room.provinces)) {
+                    if (province.noMansLand) {
+                        io.to(roomId).emit("province_updated", {
+                            provinceId,
+                            troops: province.troops,
+                            ownerName: null,
+                            noMansLand: true
+                        });
+                    }
+                }
+            }
+            // If the leaving player was the current player, advance turn
+            if (wasCurrentPlayer) {
+                let nextIndex = (room.currentTurnIndex + 1) % room.turnOrder.length;
+                let attempts = 0;
+                while (attempts < room.turnOrder.length) {
+                    const nextPlayer = room.turnOrderDetails.find(p => p.socketId === room.turnOrder[nextIndex]);
+                    if (!nextPlayer || !nextPlayer.defeated) break;
+                    nextIndex = (nextIndex + 1) % room.turnOrder.length;
+                    attempts++;
+                }
+                room.currentTurnIndex = nextIndex;
+                io.to(roomId).emit("turn", {
+                    currentPlayerId: room.turnOrder[room.currentTurnIndex],
+                    turnOrder: room.turnOrderDetails
+                });
             }
         }
         if (room.players.length === 0) {
@@ -334,6 +390,7 @@ io.on("connection", (socket) => {
     socket.on("disconnect", () => {
         rooms.forEach((room, roomId) => {
             if (!room.players.includes(socket.id)) return;
+            const wasCurrentPlayer = room.gameStarted && room.turnOrder && room.turnOrder[room.currentTurnIndex] === socket.id;
             room.players = room.players.filter(p => p !== socket.id);
             room.readyPlayers?.delete(socket.id);
             if (room.gameCountdown) {
@@ -341,8 +398,43 @@ io.on("connection", (socket) => {
                 room.gameCountdown = null;
                 io.to(roomId).emit("countdown_stop");
             }
-            for (const [continent, playerId] of room.selectedContinents) {
-                if (playerId === socket.id) room.selectedContinents.delete(continent);
+            // During game disconnect: mark provinces as no-man's-land
+            if (room.gameStarted && room.provinces) {
+                const leavingName = socket.request?.session?.userName;
+                if (leavingName) {
+                    for (const [provinceId, province] of Object.entries(room.provinces)) {
+                        if (province.owner === leavingName) {
+                            province.owner = null;
+                            province.noMansLand = true;
+                            io.to(roomId).emit("province_updated", {
+                                provinceId,
+                                troops: province.troops,
+                                ownerName: null,
+                                noMansLand: true
+                            });
+                        }
+                    }
+                }
+                // If the disconnecting player was the current player, advance turn
+                if (wasCurrentPlayer) {
+                    let nextIndex = (room.currentTurnIndex + 1) % room.turnOrder.length;
+                    let attempts = 0;
+                    while (attempts < room.turnOrder.length) {
+                        const nextPlayer = room.turnOrderDetails.find(p => p.socketId === room.turnOrder[nextIndex]);
+                        if (!nextPlayer || !nextPlayer.defeated) break;
+                        nextIndex = (nextIndex + 1) % room.turnOrder.length;
+                        attempts++;
+                    }
+                    room.currentTurnIndex = nextIndex;
+                    io.to(roomId).emit("turn", {
+                        currentPlayerId: room.turnOrder[room.currentTurnIndex],
+                        turnOrder: room.turnOrderDetails
+                    });
+                }
+            } else if (!room.gameStarted) {
+                for (const [continent, playerId] of room.selectedContinents) {
+                    if (playerId === socket.id) room.selectedContinents.delete(continent);
+                }
             }
             emitPlayersUpdated(roomId);
             if (room.players.length === 0) {
@@ -371,13 +463,14 @@ io.on("connection", (socket) => {
         const attacker = room.provinces[provinceId];
         if (!attacker || attacker.owner !== player.name) return;
         if (attacker.troops < 1) {
-            socket.emit("error", { message: "Hai bisogno di almeno 1 truppa per attaccare" });
+            socket.emit("error", { message: "You need at least 1 troop to attack" });
             return;
         }
         const neighbors = borders[provinceId] || [];
         const attackable = neighbors.filter(id => {
             const p = room.provinces[id];
-            return p && p.owner && p.owner !== player.name;
+            // Cannot attack no-man's-land or unowned provinces
+            return p && p.owner && p.owner !== player.name && !p.noMansLand;
         });
         socket.emit("attackable_provinces", { fromProvinceId: provinceId, attackable });
     });
@@ -393,8 +486,9 @@ io.on("connection", (socket) => {
         if (!attacker || !defender) return;
         if (attacker.owner !== attackerPlayer.name) return;
         if (defender.owner === attackerPlayer.name) return;
+        if (defender.noMansLand) return; // Cannot attack no-man's-land
         if (attacker.troops < 1) {
-            socket.emit("error", { message: "Hai bisogno di almeno 1 truppa per attaccare" });
+            socket.emit("error", { message: "You need at least 1 troop to attack" });
             return;
         }
         const neighbors = borders[fromProvinceId] || [];
@@ -479,7 +573,6 @@ io.on("connection", (socket) => {
 
         if (!battle.attackerRolls || !battle.defenderRolls) return;
 
-        // ── Risolvi battaglia ──
         const attackerDices = [...battle.attackerRolls].sort((a, b) => b - a);
         const defenderDices = [...battle.defenderRolls].sort((a, b) => b - a);
 
@@ -504,13 +597,10 @@ io.on("connection", (socket) => {
         if (attacker.troops < 0) attacker.troops = 0;
         if (defender.troops < 0) defender.troops = 0;
 
-        // ── CASO B: l'attaccante perde tutte le truppe → il difensore conquista la provincia ──
         if (attacker.troops <= 0) {
             attacker.troops = 0;
-            const prevOwner = attacker.owner;
             attacker.owner = defenderPlayer.name;
 
-            // Calcola quante truppe il difensore può spostare dalla sua provincia (toProvinceId)
             const defenderTroopsAvailable = defender.troops;
 
             let defenderAutoMoved = false;
@@ -518,12 +608,10 @@ io.on("connection", (socket) => {
             let defenderMaxMovable = 0;
 
             if (defenderTroopsAvailable <= 1) {
-                // Truppa "regalata": rimane 1 nella provincia di difesa, 1 va nella conquistata
-                defender.troops = 1;           // rimane 1 nella provincia difesa
-                attacker.troops = 1;           // 1 "regalata" nella provincia conquistata
+                defender.troops = 1;
+                attacker.troops = 1;
                 defenderAutoMoved = true;
             } else {
-                // Spostamento minimo automatico: lascia almeno 1 truppa nella provincia di difesa e mette 1 nella provincia conquistata
                 defender.troops = defenderTroopsAvailable - 1;
                 attacker.troops = 1;
                 defenderMinMovable = 0;
@@ -545,7 +633,6 @@ io.on("connection", (socket) => {
                 defenderLosses,
                 provinceConquered: false,
                 autoMoved: defenderAutoMoved,
-                // Campi specifici per conquista del difensore
                 defenderConqueredAttackerProvince: true,
                 defenderAutoMoved,
                 defenderMinMovable,
@@ -555,7 +642,7 @@ io.on("connection", (socket) => {
             io.to(roomId).emit("province_updated", {
                 provinceId: battle.fromProvinceId,
                 troops: attacker.troops,
-                ownerName: attacker.owner   // ora appartiene al difensore
+                ownerName: attacker.owner
             });
             io.to(roomId).emit("province_updated", {
                 provinceId: battle.toProvinceId,
@@ -566,28 +653,26 @@ io.on("connection", (socket) => {
             checkVictoryCondition(room, roomId);
             removeDefeatedPlayers(room, roomId, io);
 
-            // Emetti le truppe aggiornate per entrambi i giocatori
             const troopsTotals = getTroopsTotalByOwner(room);
             const attackerSocket = io.sockets.sockets.get(battle.attackerSocketId);
             const defenderSocket = io.sockets.sockets.get(battle.defenderSocketId);
             if (attackerSocket) {
-                attackerSocket.emit("player_troops_updated", { 
-                    playerName: battle.attackerName, 
-                    troopsRemaining: troopsTotals[battle.attackerName] || 0 
+                attackerSocket.emit("player_troops_updated", {
+                    playerName: battle.attackerName,
+                    troopsRemaining: troopsTotals[battle.attackerName] || 0
                 });
             }
             if (defenderSocket) {
-                defenderSocket.emit("player_troops_updated", { 
-                    playerName: battle.defenderName, 
-                    troopsRemaining: troopsTotals[battle.defenderName] || 0 
+                defenderSocket.emit("player_troops_updated", {
+                    playerName: battle.defenderName,
+                    troopsRemaining: troopsTotals[battle.defenderName] || 0
                 });
             }
 
             if (!defenderAutoMoved) {
-                // Salva per il confirm dello spostamento truppe del difensore
                 room.pendingDefenderTroopMove = {
-                    fromProvinceId: battle.toProvinceId,      // la provincia di difesa (origine)
-                    toProvinceId: battle.fromProvinceId,      // la provincia conquistata (destinazione)
+                    fromProvinceId: battle.toProvinceId,
+                    toProvinceId: battle.fromProvinceId,
                     defenderSocketId: battle.defenderSocketId,
                     minTroops: defenderMinMovable,
                     maxTroops: defenderMaxMovable,
@@ -598,63 +683,13 @@ io.on("connection", (socket) => {
             return;
         }
 
-        // ── CASO A: il difensore perde tutte le truppe → l'attaccante conquista ──
         const provinceConquered = defender.troops <= 0;
         const roundWinner = defenderLosses > attackerLosses ? "attacker" : "defender";
 
         if (provinceConquered) {
             defender.owner = attackerPlayer.name;
-
-            if (attacker.troops <= 1) {
-                // Movimento automatico: l'unica truppa viene piazzata nella nuova provincia
-                attacker.troops = 0;
-                attacker.owner = null;
-                defender.troops = 1;
-
-                io.to(roomId).emit("attack_result", {
-                    winner: "attacker",
-                    fromProvinceId: battle.fromProvinceId,
-                    toProvinceId: battle.toProvinceId,
-                    attackerName: battle.attackerName,
-                    defenderName: battle.defenderName,
-                    attackerDices,
-                    defenderDices,
-                    attackerLosses,
-                    defenderLosses,
-                    provinceConquered: true,
-                    autoMoved: true,
-                    maxMovableTroops: 0,
-                    minMovableTroops: 0,
-                    defenderConqueredAttackerProvince: false,
-                });
-
-                io.to(roomId).emit("province_updated", {
-                    provinceId: battle.fromProvinceId,
-                    troops: attacker.troops,
-                    ownerName: null
-                });
-                io.to(roomId).emit("province_updated", {
-                    provinceId: battle.toProvinceId,
-                    troops: defender.troops,
-                    ownerName: defender.owner
-                });
-
-                checkVictoryCondition(room, roomId);
-                removeDefeatedPlayers(room, roomId, io);
-                room.pendingBattle = null;
-                return;
-            }
-
-            // Spostamento minimo automatico: lascia almeno 1 truppa nella provincia originaria e 1 nella provincia conquistata
+            attacker.troops = 1;
             defender.troops = 1;
-            attacker.troops -= 1;
-            const minMovable = 0;
-            const maxMovable = Math.max(0, attacker.troops - 1);
-            const attackerAutoMoved = maxMovable === 0;
-
-            if (attacker.troops === 0) {
-                attacker.owner = null;
-            }
 
             io.to(roomId).emit("attack_result", {
                 winner: "attacker",
@@ -667,9 +702,9 @@ io.on("connection", (socket) => {
                 attackerLosses,
                 defenderLosses,
                 provinceConquered: true,
-                autoMoved: attackerAutoMoved,
-                maxMovableTroops: maxMovable,
-                minMovableTroops: minMovable,
+                autoMoved: true,
+                maxMovableTroops: 0,
+                minMovableTroops: 0,
                 defenderConqueredAttackerProvince: false,
             });
 
@@ -686,18 +721,9 @@ io.on("connection", (socket) => {
 
             checkVictoryCondition(room, roomId);
             removeDefeatedPlayers(room, roomId, io);
-            if (!attackerAutoMoved) {
-                room.pendingTroopMove = {
-                    fromProvinceId: battle.fromProvinceId,
-                    toProvinceId: battle.toProvinceId,
-                    attackerSocketId: battle.attackerSocketId,
-                    minTroops: minMovable,
-                    maxTroops: maxMovable,
-                };
-            }
-
+            room.pendingBattle = null;
+            return;
         } else {
-            // Nessuna conquista: round normale
             io.to(roomId).emit("attack_result", {
                 winner: roundWinner,
                 fromProvinceId: battle.fromProvinceId,
@@ -726,94 +752,6 @@ io.on("connection", (socket) => {
         }
 
         room.pendingBattle = null;
-    });
-
-    // Spostamento truppe attaccante dopo conquista (Caso A)
-    socket.on("confirm_troop_move", ({ roomId, troops }) => {
-        const room = rooms.get(roomId);
-        if (!room || !room.pendingTroopMove) return;
-        const move = room.pendingTroopMove;
-        if (socket.id !== move.attackerSocketId) return;
-
-        const count = Math.max(move.minTroops, Math.min(move.maxTroops, Number(troops)));
-        const fromProvince = room.provinces[move.fromProvinceId];
-        const toProvince = room.provinces[move.toProvinceId];
-
-        fromProvince.troops -= count;
-        toProvince.troops += count;
-
-        // Safety check: assicura che la provincia conquistata ha almeno 1 truppa
-        if (toProvince.troops < 1) {
-            const toAdd = 1 - toProvince.troops;
-            fromProvince.troops -= toAdd;
-            toProvince.troops += toAdd;
-        }
-
-        io.to(roomId).emit("province_updated", {
-            provinceId: move.fromProvinceId,
-            troops: fromProvince.troops,
-            ownerName: fromProvince.owner
-        });
-        io.to(roomId).emit("province_updated", {
-            provinceId: move.toProvinceId,
-            troops: toProvince.troops,
-            ownerName: toProvince.owner
-        });
-
-        checkVictoryCondition(room, roomId);
-        removeDefeatedPlayers(room, roomId, io);
-
-        // Emetti le truppe aggiornate per tutti i giocatori
-        const troopsTotals = getTroopsTotalByOwner(room);
-        for (const [playerName, total] of Object.entries(troopsTotals)) {
-            io.to(roomId).emit("player_troops_updated", { playerName, troopsRemaining: total });
-        }
-
-        room.pendingTroopMove = null;
-    });
-
-    // Spostamento truppe difensore dopo conquista (Caso B)
-    socket.on("confirm_defender_troop_move", ({ roomId, troops }) => {
-        const room = rooms.get(roomId);
-        if (!room || !room.pendingDefenderTroopMove) return;
-        const move = room.pendingDefenderTroopMove;
-        if (socket.id !== move.defenderSocketId) return;
-
-        const count = Math.max(move.minTroops, Math.min(move.maxTroops, Number(troops)));
-        const fromProvince = room.provinces[move.fromProvinceId]; // provincia difesa
-        const toProvince = room.provinces[move.toProvinceId];     // provincia conquistata
-
-        fromProvince.troops -= count;
-        toProvince.troops += count;
-
-        // Safety check: assicura che la provincia conquistata ha almeno 1 truppa
-        if (toProvince.troops < 1) {
-            const toAdd = 1 - toProvince.troops;
-            fromProvince.troops -= toAdd;
-            toProvince.troops += toAdd;
-        }
-
-        io.to(roomId).emit("province_updated", {
-            provinceId: move.fromProvinceId,
-            troops: fromProvince.troops,
-            ownerName: fromProvince.owner
-        });
-        io.to(roomId).emit("province_updated", {
-            provinceId: move.toProvinceId,
-            troops: toProvince.troops,
-            ownerName: toProvince.owner
-        });
-
-        checkVictoryCondition(room, roomId);
-        removeDefeatedPlayers(room, roomId, io);
-
-        // Emetti le truppe aggiornate per tutti i giocatori
-        const troopsTotals = getTroopsTotalByOwner(room);
-        for (const [playerName, total] of Object.entries(troopsTotals)) {
-            io.to(roomId).emit("player_troops_updated", { playerName, troopsRemaining: total });
-        }
-
-        room.pendingDefenderTroopMove = null;
     });
 
     socket.on("win_chance", ({ attackerTroops, defenderTroops }) => {
@@ -851,6 +789,13 @@ io.on("connection", (socket) => {
         if (!player) return;
         const province = provinces[provinceId];
         const roomProvince = room.provinces[provinceId];
+
+        // Cannot place on no-man's-land
+        if (roomProvince && roomProvince.noMansLand) {
+            socket.emit("error", { message: "Non puoi piazzare truppe qui" });
+            return;
+        }
+
         const isNativeContinent = province && province.continent === player.continent;
         const isOwned = roomProvince && roomProvince.owner === player.name;
         if (!isNativeContinent && !isOwned) {
@@ -875,7 +820,6 @@ io.on("connection", (socket) => {
             removeDefeatedPlayers(room, roomId, io);
         }
 
-        // Invia truppe da piazzare rimanenti SOLO al giocatore corrente
         socket.emit("troops_remaining", { troopsToPlaceLeft: player.troops });
 
         if (player.troops <= 0) {
@@ -983,7 +927,15 @@ io.on("connection", (socket) => {
         const room = rooms.get(roomId);
         if (!room) return;
         if (room.turnOrder[room.currentTurnIndex] !== socket.id) return;
-        room.currentTurnIndex = (room.currentTurnIndex + 1) % room.turnOrder.length;
+        let nextIndex = (room.currentTurnIndex + 1) % room.turnOrder.length;
+        let attempts = 0;
+        while (attempts < room.turnOrder.length) {
+            const nextPlayer = room.turnOrderDetails.find(p => p.socketId === room.turnOrder[nextIndex]);
+            if (!nextPlayer || !nextPlayer.defeated) break;
+            nextIndex = (nextIndex + 1) % room.turnOrder.length;
+            attempts++;
+        }
+        room.currentTurnIndex = nextIndex;
         if (room.currentTurnIndex === 0) {
             room.turnCount++;
             if (room.turnCount % 3 === 0) {
@@ -991,7 +943,12 @@ io.on("connection", (socket) => {
                 room.turnOrderRolls = {};
                 room.isRollingForTroops = true;
                 room.troopRolls = {};
-                io.to(roomId).emit("troop_roll_start");
+                // Only active (non-defeated) players roll for troops — spectators are excluded
+                const activeForTroopRoll = room.turnOrderDetails.filter(p => !p.defeated);
+                activeForTroopRoll.forEach(p => {
+                    const s = io.sockets.sockets.get(p.socketId);
+                    if (s) s.emit("troop_roll_start");
+                });
             }
         }
         io.to(roomId).emit("turn", {
@@ -1003,20 +960,20 @@ io.on("connection", (socket) => {
     socket.on("roll_for_troops", ({ roomId, roll }) => {
         const room = rooms.get(roomId);
         if (!room || !room.troopRolls) return;
-        // Controlla se il giocatore è ancora attivo
-        const isActive = room.turnOrderDetails.some(p => p.socketId === socket.id);
-        if (!isActive) return;
+        const player = room.turnOrderDetails.find(p => p.socketId === socket.id);
+        if (!player || player.defeated) return;
         if (room.troopRolls[socket.id]) return;
         room.troopRolls[socket.id] = roll;
         const playerName = socket.request.session.userName;
         io.to(roomId).emit("player_troop_rolled", { socketId: socket.id, name: playerName, roll });
-        if (Object.keys(room.troopRolls).length === room.turnOrderDetails.length) {
-            room.turnOrderDetails.forEach(player => {
+        const activePlayers = room.turnOrderDetails.filter(p => !p.defeated);
+        if (Object.keys(room.troopRolls).length === activePlayers.length) {
+            activePlayers.forEach(player => {
                 const r = room.troopRolls[player.socketId];
                 const newTroops = troopAssignment(r, player.troops);
                 if (newTroops !== null) player.troops = newTroops;
             });
-            room.turnOrderDetails.forEach(player => {
+            activePlayers.forEach(player => {
                 const s = io.sockets.sockets.get(player.socketId);
                 if (s) s.emit("placement_start", { troops: player.troops });
             });
@@ -1088,6 +1045,7 @@ function finalizeTurnOrder(room, roomId, io, allRolls) {
     room.resolvedOrder = null;
     room.pendingTiedGroups = null;
     room.currentTiedGroup = null;
+    room.defeatedOrder = []; // reset for new game
     io.to(roomId).emit("turn_order_decided", {
         turnOrder: turnOrderDetails,
         playerContinents: Object.fromEntries(room.selectedContinents),
@@ -1109,7 +1067,7 @@ function rollDice(numDice) {
 function getProvinceCountByOwner(room) {
     const count = {};
     for (const province of Object.values(room.provinces || {})) {
-        if (province.owner) {
+        if (province.owner && !province.noMansLand) {
             count[province.owner] = (count[province.owner] || 0) + 1;
         }
     }
@@ -1119,7 +1077,7 @@ function getProvinceCountByOwner(room) {
 function getTroopsTotalByOwner(room) {
     const total = {};
     for (const province of Object.values(room.provinces || {})) {
-        if (province.owner && province.troops > 0) {
+        if (province.owner && province.troops > 0 && !province.noMansLand) {
             total[province.owner] = (total[province.owner] || 0) + province.troops;
         }
     }
@@ -1128,18 +1086,37 @@ function getTroopsTotalByOwner(room) {
 
 function buildGameResults(room) {
     const provinceCount = getProvinceCountByOwner(room);
-    const players = (room.turnOrderDetails || []).map(player => ({
-        socketId: player.socketId,
-        name: player.name,
-        provinces: provinceCount[player.name] || 0,
-        troops: player.troops || 0
-    }));
 
-    players.sort((a, b) => {
-        if (b.provinces !== a.provinces) return b.provinces - a.provinces;
-        if (b.troops !== a.troops) return b.troops - a.troops;
-        return a.name.localeCompare(b.name);
-    });
+    // Active (non-defeated) players sorted by province count desc
+    const activePlayers = (room.turnOrderDetails || [])
+        .filter(p => !p.defeated)
+        .map(player => ({
+            socketId: player.socketId,
+            name: player.name,
+            provinces: provinceCount[player.name] || 0,
+            troops: player.troops || 0,
+            defeatedAt: null
+        }))
+        .sort((a, b) => {
+            if (b.provinces !== a.provinces) return b.provinces - a.provinces;
+            if (b.troops !== a.troops) return b.troops - a.troops;
+            return a.name.localeCompare(b.name);
+        });
+
+    // Defeated players: defeatedOrder is ordered first-eliminated first
+    // In ranking: last place = first eliminated, so we reverse for display
+    const defeatedPlayers = (room.defeatedOrder || []).map(entry => ({
+        socketId: entry.socketId,
+        name: entry.name,
+        provinces: 0,
+        troops: 0,
+        defeatedAt: entry.order
+    }));
+    // defeatedOrder[0] = first to die = last in ranking
+    // We reverse so that the most recently eliminated is placed just after active players
+    const defeatedSorted = [...defeatedPlayers].reverse();
+
+    const players = [...activePlayers, ...defeatedSorted];
 
     return {
         players,
@@ -1168,32 +1145,48 @@ function concludeGame(roomId, reason = "time") {
 function removeDefeatedPlayers(room, roomId, io) {
     if (!room || room.gameEnded) return;
     const provinceCount = getProvinceCountByOwner(room);
-    const defeated = room.turnOrderDetails.filter(player => (provinceCount[player.name] || 0) === 0);
+    const defeated = room.turnOrderDetails.filter(player =>
+        !player.defeated && (provinceCount[player.name] || 0) === 0
+    );
     if (defeated.length === 0) return;
 
     defeated.forEach(player => {
-        // Rimuovi dal turnOrder
-        room.turnOrder = room.turnOrder.filter(id => id !== player.socketId);
-        room.turnOrderDetails = room.turnOrderDetails.filter(p => p.socketId !== player.socketId);
-        // Notifica il giocatore sconfitto
+        player.defeated = true;
+        // Record elimination order
+        if (!room.defeatedOrder) room.defeatedOrder = [];
+        room.defeatedOrder.push({
+            socketId: player.socketId,
+            name: player.name,
+            order: room.defeatedOrder.length // 0 = first eliminated
+        });
         const socket = io.sockets.sockets.get(player.socketId);
         if (socket) {
             socket.emit("defeated", { roomId });
         }
     });
 
-    // Se rimane solo un giocatore, finisce la partita
-    if (room.turnOrder.length <= 1) {
+    const activePlayers = room.turnOrderDetails.filter(p => !p.defeated);
+    if (activePlayers.length <= 1) {
         concludeGame(roomId, "conquest");
         return;
     }
 
-    // Aggiorna l'indice del turno se necessario
-    if (room.currentTurnIndex >= room.turnOrder.length) {
-        room.currentTurnIndex = 0;
+    // If the current player was defeated, advance to the next turn
+    const currentPlayer = room.turnOrder[room.currentTurnIndex];
+    const currentPlayerDetail = room.turnOrderDetails.find(p => p.socketId === currentPlayer);
+    if (currentPlayerDetail && currentPlayerDetail.defeated) {
+        // Advance turn
+        let nextIndex = (room.currentTurnIndex + 1) % room.turnOrder.length;
+        let attempts = 0;
+        while (attempts < room.turnOrder.length) {
+            const nextPlayer = room.turnOrderDetails.find(p => p.socketId === room.turnOrder[nextIndex]);
+            if (!nextPlayer || !nextPlayer.defeated) break;
+            nextIndex = (nextIndex + 1) % room.turnOrder.length;
+            attempts++;
+        }
+        room.currentTurnIndex = nextIndex;
     }
 
-    // Invia il nuovo turno
     io.to(roomId).emit("turn", {
         currentPlayerId: room.turnOrder[room.currentTurnIndex],
         turnOrder: room.turnOrderDetails
@@ -1202,18 +1195,19 @@ function removeDefeatedPlayers(room, roomId, io) {
 
 function checkVictoryCondition(room, roomId) {
     if (!room || room.gameEnded) return false;
-    const results = buildGameResults(room);
-    const totalProvinces = Object.keys(provinces).length;
-    const winner = results.players[0];
-    if (winner && winner.provinces === totalProvinces) {
-        concludeGame(roomId, "conquest");
-        return true;
+    const provinceCount = getProvinceCountByOwner(room);
+    const activePlayers = room.turnOrderDetails.filter(p => !p.defeated);
+    for (const player of activePlayers) {
+        if ((provinceCount[player.name] || 0) === Object.keys(provinces).length) {
+            concludeGame(roomId, "conquest");
+            return true;
+        }
     }
     return false;
 }
 
 httpServer.listen(3000, () => {
-    console.log("Server in ascolto su http://localhost:3000");
+    console.log("Server listening on http://localhost:3000");
 });
 
 function clearDeleteTimer(roomId) {
