@@ -1189,3 +1189,35 @@ body::before {
     from { stroke-width: 2; }
     to   { stroke-width: 5; }
 }
+
+/* ── PLAYER PANEL MIGLIORATO ── */
+
+#player-panel {
+    width: 200px;
+    padding: 16px 18px 18px;
+}
+
+.pp-title {
+    font-size: 0.55em;
+    letter-spacing: 2px;
+    color: rgba(255, 68, 68, 0.7);
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+}
+
+/* Badge truppe da piazzare — evidenziato in verde */
+.pp-troops-badge {
+    font-family: 'Cinzel Decorative', Georgia, serif;
+    font-size: 1.3em !important;
+    text-shadow: 0 0 10px rgba(167, 201, 87, 0.5);
+    animation: pulse-opacity 1.5s ease-in-out infinite;
+}
+
+#placement-banner {
+    margin-top: 4px;
+    padding-top: 10px;
+    border-top: 1px solid rgba(167, 201, 87, 0.3);
+    background: rgba(167, 201, 87, 0.05);
+    border-radius: 6px;
+    padding: 8px 4px 2px;
+}

@@ -86,7 +86,7 @@ applyPlayerColor(playerContinent);
 // Controlla se il gioco è già iniziato (persiste tra reload)
 const gameAlreadyStarted = sessionStorage.getItem("gameStarted") === "true";
 if (gameAlreadyStarted) {
-    console.log("[game_logic] Gioco già iniziato, skipping dice modal.");
+    console.log("[game_logic] Game already started, skipping dice modal.");
     gameHasStarted = true;
     hideModal();
 }
@@ -167,7 +167,7 @@ socket.on("turn_order_status", ({ isDecided, turnOrder }) => {
     if (isDecided && !gameHasStarted) {
         gameHasStarted = true;
         hideModal();
-        console.log("[turn_order_status] Turn order già deciso, nascondo il pannello del dado.");
+        console.log("[turn_order_status] Turn order already decided, hiding the dice panel.");
     }
 });
 
@@ -183,7 +183,7 @@ btnRoll.addEventListener("click", () => {
     sessionStorage.setItem("roomId", rId);
     const roll = Math.floor(Math.random() * 6) + 1;
     btnRoll.disabled = true;
-    btnRoll.textContent = "Dado tirato!";
+    btnRoll.textContent = "The dice was rolled!";
 
     if (isTroopRoll) {
         socket.emit("roll_for_troops", { roomId: rId, roll });
@@ -197,7 +197,7 @@ btnRoll.addEventListener("click", () => {
         diceResultDisplay.style.display = "block";
         myRollValue.textContent = roll;
         waitingMsg.style.display = "block";
-        waitingMsg.textContent = "In attesa degli altri...";
+        waitingMsg.textContent = "Waiting for other players...";
 
     } else {
         socket.emit("roll_for_turn_order", { roomId: rId });
@@ -262,7 +262,7 @@ socket.on("player_troop_rolled", ({ socketId, name, roll }) => {
         diceResultDisplay.style.display = "block";
         myRollValue.textContent = roll;
         waitingMsg.style.display = "block";
-        waitingMsg.textContent = "In attesa degli altri giocatori...";
+        waitingMsg.textContent = "Waiting for other players...";
     }
 });
 
@@ -276,10 +276,10 @@ socket.on("turn_order_decided", ({ turnOrder, playerContinents }) => {
     console.log("[turn_order_decided] my continent:", myContinent);
 
     if (!myContinent) {
-        console.warn("[turn_order_decided] continente mancante per socket:", socket.id);
+        console.warn("[turn_order_decided] continent missing for socket:", socket.id);
     }
     // (opzionale) fallback:
-    const continentToShow = myContinent || "nessun continente";
+    const continentToShow = myContinent || "no continent";
     document.getElementById("pp-continent").textContent = continentToShow;
 
     const myEntry = turnOrder.find(p => p.socketId === socket.id);
@@ -297,8 +297,8 @@ socket.on("turn_order_decided", ({ turnOrder, playerContinents }) => {
         sessionStorage.setItem("playerTroops", myEntry.troops);
     }
 
-    modalTitle.textContent = "Ordine Turni Stabilito!";
-    modalDesc.textContent = "La partita sta per iniziare...";
+    modalTitle.textContent = "Turn Order Decided!";
+    modalDesc.textContent = "The game is about to start...";
     diceRollsList.innerHTML = "";
     btnRoll.style.display = "none";
     waitingMsg.style.display = "none";
@@ -310,7 +310,7 @@ socket.on("turn_order_decided", ({ turnOrder, playerContinents }) => {
         const medal = medals[index] || `${index + 1}.`;
         const isMe = player.socketId === socket.id;
         row.innerHTML = `
-            <span class="dice-roll-name">${medal} ${player.name}${isMe ? " (tu)" : ""}</span>
+            <span class="dice-roll-name">${medal} ${player.name}${isMe ? " (you)" : ""}</span>
         `;
         diceRollsList.appendChild(row);
     });
@@ -353,7 +353,7 @@ socket.on("turn", ({ currentPlayerId, turnOrder }) => {
     document.querySelectorAll(".player-item").forEach(item => {
         const nameEl = item.querySelector(".player-name");
         if (!nameEl) return;
-        const playerName = nameEl.textContent.replace(" (tu)", "");
+        const playerName = nameEl.textContent.replace(" (you)", "");
         const isActive = playerName === turnOrder.find(p => p.socketId === currentPlayerId)?.name;
         item.classList.toggle("active-turn", isActive);
     });
@@ -368,7 +368,7 @@ socket.on("turn", ({ currentPlayerId, turnOrder }) => {
     } else {
         // NUOVO: mostra di chi è il turno
         const currentName = turnOrder.find(p => p.socketId === currentPlayerId)?.name || "...";
-        banner.textContent = `⚔ TURNO DI ${currentName.toUpperCase()} ⚔`;
+        banner.textContent = `⚔ IT'S ${currentName.toUpperCase()}'S TURN ⚔`;
         banner.style.display = "block";
         banner.style.opacity = "1";
         setTimeout(() => {
@@ -387,26 +387,23 @@ document.getElementById("btn-end-turn").addEventListener("click", () => {
     document.getElementById("btn-end-turn").style.display = "none";
 });
 
-
-
-
 socket.on("show_action_box", () => {
     showModal();
 });
 
 socket.on("battle_result", ({ winner }) => {
     if (winner === "attacker") {
-        console.log("L'attaccante ha vinto!");
+        console.log("The attacker has won!");
     } else {
-        console.log("Il difensore ha resistito!");
+        console.log("The defender has resisted!");
     }
 });
 
 socket.on("placement_start", ({ troops }) => {
-    console.log("[placement_start] ricevuto, troops:", troops, "overlay display:", overlay.style.display);
+    console.log("[placement_start] received, troops:", troops, "overlay display:", overlay.style.display);
     isTroopRoll = false; // reset
-    hideModal(); // Chiudi il modal sempre
-    // Nascondi il bottone Fine Turno durante il placement
+    hideModal(); // Close the modal always
+    // Hide the End Turn button during placement
     document.getElementById("btn-end-turn").style.display = "none";
     applyPlacementStart(troops);
 });
@@ -426,7 +423,7 @@ socket.on("troops_remaining", ({ troopsToPlaceLeft }) => {
 });
 
 socket.on("error", ({ message }) => {
-    console.error("Errore socket:", message);
+    console.error("Socket error:", message);
     if (placementPhase) {
         showPlacementError(message);
     } else {
@@ -463,7 +460,7 @@ socket.on("tie_detected", ({ tiedPlayers, tiedRoll, allRolls }) => {
         const isTied = tiedPlayers.some(p => p.socketId === socketId);
         row.innerHTML = `
             <span class="dice-roll-name" style="${isTied ? 'color:#ff4444;font-weight:bold;' : 'opacity:0.5;'}">
-                ${name}${isMe ? " (tu)" : ""}${isTied ? " ⚔" : ""}
+                ${name}${isMe ? " (you)" : ""}${isTied ? " ⚔" : ""}
             </span>
             <div class="dice-roll-badge">
                 <div class="dice-face">${roll}</div>
@@ -473,23 +470,23 @@ socket.on("tie_detected", ({ tiedPlayers, tiedRoll, allRolls }) => {
     }
 
     // Titolo e descrizione
-    modalTitle.textContent = `⚔ PAREGGIO! (${tiedRoll})`;
+    modalTitle.textContent = `⚔ TIE! (${tiedRoll})`;
     diceResultDisplay.style.display = "none";
     waitingMsg.style.display = "none";
 
     if (amITied) {
-        modalDesc.textContent = `Pareggio tra ${tiedNames}! Ritira il dado per decidere.`;
+        modalDesc.textContent = `Tie between ${tiedNames}! Roll the dice to decide.`;
         btnRoll.disabled = false;
-        btnRoll.textContent = "Ritira il Dado";
+        btnRoll.textContent = "Roll the Dice for the Tie-breaker";
         btnRoll.style.display = "block";
 
         // Cambia temporaneamente il comportamento del bottone
         btnRoll._isTieRoll = true;
     } else {
-        modalDesc.textContent = `Pareggio tra ${tiedNames}! In attesa del loro rilancio...`;
+        modalDesc.textContent = `Tie between ${tiedNames}! Waiting for their re-roll...`;
         btnRoll.style.display = "none";
         waitingMsg.style.display = "block";
-        waitingMsg.textContent = `In attesa del rilancio di ${tiedNames}...`;
+        waitingMsg.textContent = `Waiting for the re-roll of ${tiedNames}...`;
     }
 
     showModal();
@@ -497,9 +494,13 @@ socket.on("tie_detected", ({ tiedPlayers, tiedRoll, allRolls }) => {
 
 socket.on("troop_roll_start", () => {
     isTroopRoll = true;
+
+    const countdownEl = document.getElementById("modal-countdown");
+    if (countdownEl) countdownEl.style.display = "none";
+
     // Banner flash per tutti
     const banner = document.getElementById("turn-banner");
-    banner.textContent = "⚔ NUOVO LANCIO TRUPPE ⚔";
+    banner.textContent = "⚔ NEW TROOP ROLL ⚔";
     banner.style.display = "block";
     banner.style.opacity = "1";
     setTimeout(() => {
@@ -508,13 +509,13 @@ socket.on("troop_roll_start", () => {
     }, 2000);
 
     // Modal dado — uguale per tutti, nessun pareggio
-    modalTitle.textContent = "Tira per le Truppe!";
-    modalDesc.textContent = "Tira il dado per ricevere nuove truppe!";
+    modalTitle.textContent = "Roll for the Troops!";
+    modalDesc.textContent = "Roll the dice to receive new troops!";
     diceRollsList.innerHTML = "";
     diceResultDisplay.style.display = "none";
     waitingMsg.style.display = "none";
     btnRoll.disabled = false;
-    btnRoll.textContent = "Tira il Dado";
+    btnRoll.textContent = "Roll the Dice";
     btnRoll.style.display = "block";
     showModal();
 });
@@ -523,7 +524,7 @@ socket.on("troop_roll_start", () => {
 // --- FUNZIONI DI GIOCO ---
 function showBattleModal({ role, maxDice, attackerName, defenderName, attackerTroops, defenderTroops }) {
     const isParticipant = role === "attacker" || role === "defender";
-    const roleLabel = role === "attacker" ? "⚔ SEI L'ATTACCANTE" : "🛡 SEI IL DIFENSORE";
+    const roleLabel = role === "attacker" ? "⚔ YOU ARE THE ATTACKER" : "🛡 YOU ARE THE DEFENDER";
 
     const modal = document.createElement("div");
     modal.id = "battle-modal";
@@ -538,19 +539,19 @@ function showBattleModal({ role, maxDice, attackerName, defenderName, attackerTr
                     padding:32px 40px; min-width:340px; text-align:center; color:#fff;">
 
             <div style="font-size:13px; letter-spacing:2px; color:#ff4444; margin-bottom:8px;">
-                ${isParticipant ? roleLabel : "⚔ BATTAGLIA IN CORSO"}
+                ${isParticipant ? roleLabel : "⚔ BATTLE IN PROGRESS ⚔"}
             </div>
 
             <div style="font-size:20px; font-weight:bold; margin-bottom:4px;">
                 ${attackerName} <span style="color:#ff4444;">VS</span> ${defenderName}
             </div>
             <div style="font-size:13px; color:#888; margin-bottom:24px;">
-                Truppe: ${attackerTroops} ⚔ — ${defenderTroops} 🛡
+                Troops: ${attackerTroops} ⚔ — ${defenderTroops} 🛡
             </div>
 
             ${isParticipant ? `
                 <div style="font-size:14px; color:#ccc; margin-bottom:16px;">
-                    Tira ${maxDice} dado${maxDice > 1 ? "i" : ""}
+                    Roll ${maxDice} dice${maxDice > 1 ? "s" : ""}
                 </div>
 
                 <div id="battle-dice-container" style="display:flex; gap:12px; justify-content:center; margin-bottom:20px; flex-wrap:wrap;">
@@ -568,15 +569,15 @@ function showBattleModal({ role, maxDice, attackerName, defenderName, attackerTr
                     style="background:#c41e3a; color:#fff; border:none; border-radius:8px;
                            padding:12px 32px; font-size:16px; cursor:pointer; margin-bottom:8px;
                            font-family:inherit; width:100%;">
-                    Tira i Dadi
+                    Roll the Dice
                 </button>
             ` : `
-                <div style="color:#888; font-size:14px;">In attesa dei tiri...</div>
+                <div style="color:#888; font-size:14px;">Waiting for the rolls...</div>
             `}
 
             <div style="margin-top:16px; display:flex; gap:24px; justify-content:center; font-size:13px;">
-                <div id="battle-rolled-attacker" style="color:#555;">⏳ ${attackerName} sta tirando...</div>
-                <div id="battle-rolled-defender" style="color:#555;">⏳ ${defenderName} sta tirando...</div>
+                <div id="battle-rolled-attacker" style="color:#555;"> ${attackerName} is rolling...</div>
+                <div id="battle-rolled-defender" style="color:#555;"> ${defenderName} is rolling...</div>
             </div>
         </div>
     `;
@@ -636,10 +637,10 @@ function showAttackResult({
 
     const winnerColor = winner === "attacker" ? "#a7c957" : "#4488ff";
     const winnerText = provinceConquered
-        ? `🎯 ${attackerName} ha conquistato la provincia!`
+        ? `${attackerName} has conquered the province!`
         : winner === "attacker"
-            ? `⚔ ${attackerName} vince il round!`
-            : `🛡 ${defenderName} resiste!`;
+            ? `⚔ ${attackerName} won the round!`
+            : `🛡 ${defenderName} resisted!`;
 
     // Crea le righe di confronto dadi
     const diceRows = attackerDices.map((d, i) => {
@@ -683,7 +684,7 @@ function showAttackResult({
 ${provinceConquered && isAttacker && !autoMoved ? `
     <div style="margin-top:24px; border-top:1px solid #333; padding-top:20px;">
         <div style="font-size:14px; color:#ccc; margin-bottom:12px;">
-            Quante truppe vuoi spostare nella nuova provincia?
+            How many troops you want to move?
         </div>
         <div style="display:flex; align-items:center; gap:12px; justify-content:center; margin-bottom:8px;">
             <span style="color:#888; font-size:13px;">${minMovableTroops}</span>
@@ -694,29 +695,29 @@ ${provinceConquered && isAttacker && !autoMoved ? `
             <span style="color:#888; font-size:13px;">${maxMovableTroops}</span>
         </div>
         <div style="font-size:22px; font-weight:bold; color:#a7c957; margin-bottom:16px;">
-            <span id="troop-move-value">${minMovableTroops}</span> truppe
+            <span id="troop-move-value">${minMovableTroops}</span> troops
         </div>
         <button id="confirm-move-btn"
             style="background:#a7c957; color:#000; border:none; border-radius:8px;
                    padding:12px 32px; font-size:15px; cursor:pointer;
                    font-family:inherit; width:100%; font-weight:bold;">
-            Sposta Truppe
+            Move Troops
         </button>
     </div>
 ` : provinceConquered && isAttacker && autoMoved ? `
-    <div style="margin-top:16px; color:#a7c957; font-size:13px;">
-        La tua unica truppa si è spostata nella nuova provincia.
+    <div style="margin-top:16px; color:#888; font-size:13px;">
+        ${attackerName} has moved their troops to the new province.
     </div>
 ` : provinceConquered ? `
     <div style="margin-top:16px; color:#888; font-size:13px;">
-        ${attackerName} sta scegliendo quante truppe spostare...
+        ${attackerName} is choosing how many troops to move...
     </div>
 ` : `
     <button id="close-result-btn"
         style="margin-top:20px; background:#2a2f3e; color:#ccc; border:1px solid #444;
                border-radius:8px; padding:10px 28px; font-size:14px; cursor:pointer;
                font-family:inherit;">
-        Chiudi
+        Close
     </button>
 `}
         </div>
@@ -749,8 +750,9 @@ ${provinceConquered && isAttacker && !autoMoved ? `
         closeBtn.addEventListener("click", () => result.remove());
     }
 
-    // Gli spettatori e il difensore vedono il modal chiudersi automaticamente
-    if (!isAttacker || !provinceConquered) {
+    // Chiusura automatica per tutti i casi tranne attaccante con conquista (deve scegliere truppe)
+    const needsInput = isAttacker && provinceConquered && !autoMoved;
+    if (!needsInput) {
         setTimeout(() => result.remove(), 4000);
     }
 }
@@ -759,11 +761,15 @@ function turnMessage(turnCounter, isPlacement, isMyTurn = false) {
     const banner = document.getElementById("turn-banner");
     banner.style.display = "block";
     banner.style.opacity = "1";
+
     if (isPlacement) {
-        banner.textContent = "⚔ PIAZZAMENTO TRUPPE ⚔";
-        // rimane visibile, non sparisce da solo
+        banner.textContent = "⚔ TROOPS PLACEMENT ⚔";
+        setTimeout(() => {
+            banner.style.opacity = "0";
+            setTimeout(() => { banner.style.display = "none"; }, 500);
+        }, 2500);
     } else if (isMyTurn) {
-        banner.textContent = "⚔ È IL TUO TURNO ⚔";
+        banner.textContent = "⚔ IT'S YOUR TURN ⚔";
         setTimeout(() => {
             banner.style.opacity = "0";
             setTimeout(() => { banner.style.display = "none"; }, 500);
@@ -785,6 +791,7 @@ function applyPlayerColor(continent) {
     const color = continentColors[continent] || '#ffffff';
     document.getElementById("pp-name").style.color = color;
     document.getElementById("pp-continent").style.color = color;
+    document.getElementById("troops-to-place").style.color = color;
 }
 
 function checkGameState() {
@@ -804,7 +811,7 @@ function getRoomId() {
 
 function startGame(turnOrder) {
     gameHasStarted = true;
-    window._turnOrderDetails = turnOrder; // ← salva qui pure
+    window._turnOrderDetails = turnOrder; 
     sessionStorage.setItem("gameStarted", "true");
     hideModal();
 
@@ -858,7 +865,7 @@ function applyPlacementStart(troops) {
     troopsToPlace = troops;
     troopsToPlaceEl.textContent = troopsToPlace;
     placementBanner.style.display = "block";
-    turnMessage(turnCounter, true); // mostra "TROOPS ASSIGNMENT TURN" a tutti
+    turnMessage(turnCounter, true); 
 }
 
 // stato locale dell'attacco
@@ -969,7 +976,7 @@ socket.on("under_attack", ({ attackerName, fromProvinceId, toProvinceId }) => {
         box-shadow: 0 0 50px rgba(255, 0, 0, 0.8);
         animation: pulse 0.5s ease-in-out;
     `;
-    alert.textContent = `⚠️ ATTACCO! ${attackerName} ti sta attaccando!`;
+    alert.textContent = `ATTACK! ${attackerName} is attacking you!`;
     document.body.appendChild(alert);
     setTimeout(() => alert.remove(), 3000);
 });
