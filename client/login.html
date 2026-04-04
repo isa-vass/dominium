@@ -1,12 +1,15 @@
 <!DOCTYPE html>
 <html lang="it">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dominium – Accedi</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Cinzel+Decorative:wght@700&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Cinzel+Decorative:wght@700&display=swap"
+        rel="stylesheet">
     <link rel="stylesheet" href="./config/style.css">
     <style>
         /* ── AGGIUNTE SPECIFICHE PER LOGIN ── */
@@ -34,16 +37,23 @@
         }
 
         .login-header h1 {
-            font-family: 'Cinzel Decorative', 'Georgia', serif;
+            font-family: 'Cinzel', 'Georgia', serif;
             font-size: 3em;
             letter-spacing: 8px;
             text-transform: uppercase;
-            background: linear-gradient(180deg, #ff4444 0%, #8b0000 100%);
+            background: linear-gradient(135deg, #1a0000 0%, #4a0000 50%, #1a0000 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
-            filter: drop-shadow(0 2px 4px rgba(0,0,0,0.8));
             margin-bottom: 6px;
+            text-align: center;
+            color: #ff4444;
+            margin-bottom: 40px;
+            text-shadow:
+                0 0 10px rgba(255, 0, 0, 0.5),
+                0 0 20px rgba(139, 0, 0, 0.3),
+                2px 2px 4px rgba(0, 0, 0, 0.8);
+            position: relative;
         }
 
         .login-header .subtitle {
@@ -61,9 +71,9 @@
             border-radius: 15px;
             padding: 36px 40px 40px;
             box-shadow:
-                0 20px 60px rgba(0,0,0,0.8),
-                inset 0 1px 0 rgba(255,68,68,0.15),
-                0 0 30px rgba(139,0,0,0.25);
+                0 20px 60px rgba(0, 0, 0, 0.8),
+                inset 0 1px 0 rgba(255, 68, 68, 0.15),
+                0 0 30px rgba(139, 0, 0, 0.25);
             position: relative;
         }
 
@@ -85,7 +95,7 @@
         .tabs {
             display: flex;
             margin-bottom: 28px;
-            border-bottom: 2px solid rgba(139,0,0,0.4);
+            border-bottom: 2px solid rgba(139, 0, 0, 0.4);
             gap: 0;
         }
 
@@ -99,7 +109,7 @@
             font-size: 0.78em;
             letter-spacing: 2px;
             text-transform: uppercase;
-            color: rgba(255,204,204,0.35);
+            color: rgba(255, 204, 204, 0.35);
             transition: color 0.2s;
         }
 
@@ -108,12 +118,17 @@
             border-bottom: 2px solid #ff4444;
             margin-bottom: -2px;
             font-weight: 700;
-            text-shadow: 0 0 8px rgba(255,0,0,0.3);
+            text-shadow: 0 0 8px rgba(255, 0, 0, 0.3);
         }
 
         /* Sezioni form */
-        .form-section { display: none; }
-        .form-section.active { display: block; }
+        .form-section {
+            display: none;
+        }
+
+        .form-section.active {
+            display: block;
+        }
 
         /* Label e input */
         .form-group {
@@ -126,15 +141,15 @@
             font-size: 0.65em;
             letter-spacing: 2px;
             text-transform: uppercase;
-            color: rgba(255,204,204,0.45);
+            color: rgba(255, 204, 204, 0.45);
             margin-bottom: 8px;
         }
 
         .form-group input {
             width: 100%;
             padding: 12px 14px;
-            background: rgba(0,0,0,0.4);
-            border: 2px solid rgba(139,0,0,0.5);
+            background: rgba(0, 0, 0, 0.4);
+            border: 2px solid rgba(139, 0, 0, 0.5);
             border-radius: 8px;
             color: #ffcccc;
             font-family: 'Cinzel', 'Georgia', serif;
@@ -146,11 +161,11 @@
 
         .form-group input:focus {
             border-color: #ff4444;
-            box-shadow: 0 0 12px rgba(255,0,0,0.2);
+            box-shadow: 0 0 12px rgba(255, 0, 0, 0.2);
         }
 
         .form-group input::placeholder {
-            color: rgba(255,204,204,0.2);
+            color: rgba(255, 204, 204, 0.2);
             font-size: 0.9em;
         }
 
@@ -170,7 +185,7 @@
             cursor: pointer;
             margin-top: 6px;
             transition: all 0.3s ease;
-            box-shadow: 0 4px 15px rgba(139,0,0,0.5);
+            box-shadow: 0 4px 15px rgba(139, 0, 0, 0.5);
             position: relative;
             overflow: hidden;
         }
@@ -178,28 +193,31 @@
         .submit-btn::before {
             content: '';
             position: absolute;
-            top: 50%; left: 50%;
-            width: 0; height: 0;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
             border-radius: 50%;
-            background: rgba(255,255,255,0.1);
-            transform: translate(-50%,-50%);
+            background: rgba(255, 255, 255, 0.1);
+            transform: translate(-50%, -50%);
             transition: width 0.5s, height 0.5s;
         }
 
         .submit-btn:hover::before {
-            width: 400px; height: 400px;
+            width: 400px;
+            height: 400px;
         }
 
         .submit-btn:hover {
             transform: translateY(-2px);
-            box-shadow: 0 6px 25px rgba(255,0,0,0.7);
+            box-shadow: 0 6px 25px rgba(255, 0, 0, 0.7);
             border-color: #ff4444;
         }
 
         /* Messaggio errore */
         .alert-error {
-            background: rgba(139,0,0,0.15);
-            border: 1px solid rgba(255,0,0,0.35);
+            background: rgba(139, 0, 0, 0.15);
+            border: 1px solid rgba(255, 0, 0, 0.35);
             color: #ff6666;
             padding: 10px 14px;
             border-radius: 8px;
@@ -210,164 +228,171 @@
             display: none;
         }
 
-        .alert-error.visible { display: block; }
+        .alert-error.visible {
+            display: block;
+        }
 
         /* Separatore dentro la card */
         .card-divider {
             height: 1px;
-            background: rgba(139,0,0,0.25);
+            background: rgba(139, 0, 0, 0.25);
             margin: 0 0 24px;
         }
     </style>
 </head>
+
 <body>
-<div class="login-wrapper">
+    <div class="login-wrapper">
 
-    <!-- Titolo stile gioco -->
-    <div class="login-header">
-        <h1>Dominium</h1>
-        <p class="subtitle">Conquista il mondo</p>
+        <!-- Titolo stile gioco -->
+        <div class="login-header">
+            <h1>Dominium</h1>
+            <p class="subtitle">Conquista il mondo</p>
+        </div>
+
+        <div class="login-card">
+
+            <!-- Tab selector -->
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab(event, 'login')">Accedi</button>
+                <button class="tab" onclick="switchTab(event, 'register')">Registrati</button>
+            </div>
+
+            <div class="card-divider"></div>
+
+            <!-- LOGIN -->
+            <div class="form-section active" id="section-login">
+                <div class="alert-error" id="error-login"></div>
+                <div class="form-group">
+                    <label for="login-email">Email</label>
+                    <input type="email" id="login-email" placeholder="Inserisci la tua email" autocomplete="email">
+                </div>
+                <div class="form-group">
+                    <label for="login-password">Password</label>
+                    <input type="password" id="login-password" placeholder="Inserisci la tua password"
+                        autocomplete="current-password">
+                </div>
+                <button class="submit-btn" onclick="doLogin()">Accedi</button>
+            </div>
+
+            <!-- REGISTRAZIONE -->
+            <div class="form-section" id="section-register">
+                <div class="alert-error" id="error-register"></div>
+                <div class="form-group">
+                    <label for="reg-email">Email</label>
+                    <input type="email" id="reg-email" placeholder="Inserisci la tua email" autocomplete="email">
+                </div>
+                <div class="form-group">
+                    <label for="reg-password">Password</label>
+                    <input type="password" id="reg-password" placeholder="Scegli una password (min. 6 caratteri)"
+                        autocomplete="new-password">
+                </div>
+                <div class="form-group">
+                    <label for="reg-password2">Conferma password</label>
+                    <input type="password" id="reg-password2" placeholder="Ripeti la password"
+                        autocomplete="new-password">
+                </div>
+                <button class="submit-btn" onclick="doRegister()">Registrati</button>
+            </div>
+
+        </div>
     </div>
 
-    <div class="login-card">
-
-        <!-- Tab selector -->
-        <div class="tabs">
-            <button class="tab active" onclick="switchTab(event, 'login')">Accedi</button>
-            <button class="tab" onclick="switchTab(event, 'register')">Registrati</button>
-        </div>
-
-        <div class="card-divider"></div>
-
-        <!-- LOGIN -->
-        <div class="form-section active" id="section-login">
-            <div class="alert-error" id="error-login"></div>
-            <div class="form-group">
-                <label for="login-email">Email</label>
-                <input type="email" id="login-email" placeholder="Inserisci la tua email" autocomplete="email">
-            </div>
-            <div class="form-group">
-                <label for="login-password">Password</label>
-                <input type="password" id="login-password" placeholder="Inserisci la tua password" autocomplete="current-password">
-            </div>
-            <button class="submit-btn" onclick="doLogin()">Accedi</button>
-        </div>
-
-        <!-- REGISTRAZIONE -->
-        <div class="form-section" id="section-register">
-            <div class="alert-error" id="error-register"></div>
-            <div class="form-group">
-                <label for="reg-email">Email</label>
-                <input type="email" id="reg-email" placeholder="Inserisci la tua email" autocomplete="email">
-            </div>
-            <div class="form-group">
-                <label for="reg-password">Password</label>
-                <input type="password" id="reg-password" placeholder="Scegli una password (min. 6 caratteri)" autocomplete="new-password">
-            </div>
-            <div class="form-group">
-                <label for="reg-password2">Conferma password</label>
-                <input type="password" id="reg-password2" placeholder="Ripeti la password" autocomplete="new-password">
-            </div>
-            <button class="submit-btn" onclick="doRegister()">Registrati</button>
-        </div>
-
-    </div>
-</div>
-
-<script>
-    function switchTab(event, tab) {
-        document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
-        document.querySelectorAll(".form-section").forEach(s => s.classList.remove("active"));
-        document.getElementById("section-" + tab).classList.add("active");
-        event.target.classList.add("active");
-    }
-
-    function showError(id, msg) {
-        const el = document.getElementById(id);
-        el.textContent = msg;
-        el.classList.add("visible");
-    }
-
-    function hideError(id) {
-        document.getElementById(id).classList.remove("visible");
-    }
-
-    async function doLogin() {
-        hideError("error-login");
-        const email    = document.getElementById("login-email").value.trim();
-        const password = document.getElementById("login-password").value.trim();
-
-        if (!email || !password) {
-            showError("error-login", "Inserisci email e password");
-            return;
+    <script>
+        function switchTab(event, tab) {
+            document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+            document.querySelectorAll(".form-section").forEach(s => s.classList.remove("active"));
+            document.getElementById("section-" + tab).classList.add("active");
+            event.target.classList.add("active");
         }
 
-        try {
-            const res  = await fetch("/auth/login", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ email, password })
-            });
-            const data = await res.json();
+        function showError(id, msg) {
+            const el = document.getElementById(id);
+            el.textContent = msg;
+            el.classList.add("visible");
+        }
 
-            if (!data.success) {
-                showError("error-login", data.message);
+        function hideError(id) {
+            document.getElementById(id).classList.remove("visible");
+        }
+
+        async function doLogin() {
+            hideError("error-login");
+            const email = document.getElementById("login-email").value.trim();
+            const password = document.getElementById("login-password").value.trim();
+
+            if (!email || !password) {
+                showError("error-login", "Inserisci email e password");
                 return;
             }
 
-            window.location.href = "/view/action.html";
-        } catch (err) {
-            showError("error-login", "Errore di connessione al server");
-        }
-    }
+            try {
+                const res = await fetch("/auth/login", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ email, password })
+                });
+                const data = await res.json();
 
-    async function doRegister() {
-        hideError("error-register");
-        const email     = document.getElementById("reg-email").value.trim();
-        const password  = document.getElementById("reg-password").value.trim();
-        const password2 = document.getElementById("reg-password2").value.trim();
+                if (!data.success) {
+                    showError("error-login", data.message);
+                    return;
+                }
 
-        if (!email || !password || !password2) {
-            showError("error-register", "Compila tutti i campi");
-            return;
-        }
-
-        if (password !== password2) {
-            showError("error-register", "Le password non coincidono");
-            return;
+                window.location.href = "/view/action.html";
+            } catch (err) {
+                showError("error-login", "Errore di connessione al server");
+            }
         }
 
-        if (password.length < 6) {
-            showError("error-register", "La password deve essere di almeno 6 caratteri");
-            return;
-        }
+        async function doRegister() {
+            hideError("error-register");
+            const email = document.getElementById("reg-email").value.trim();
+            const password = document.getElementById("reg-password").value.trim();
+            const password2 = document.getElementById("reg-password2").value.trim();
 
-        try {
-            const res  = await fetch("/auth/register", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ email, password })
-            });
-            const data = await res.json();
-
-            if (!data.success) {
-                showError("error-register", data.message);
+            if (!email || !password || !password2) {
+                showError("error-register", "Compila tutti i campi");
                 return;
             }
 
-            window.location.href = "/view/action.html";
-        } catch (err) {
-            showError("error-register", "Errore di connessione al server");
-        }
-    }
+            if (password !== password2) {
+                showError("error-register", "Le password non coincidono");
+                return;
+            }
 
-    // Invio con tasto Enter
-    document.addEventListener("keydown", (e) => {
-        if (e.key !== "Enter") return;
-        const loginActive = document.getElementById("section-login").classList.contains("active");
-        if (loginActive) doLogin();
-        else doRegister();
-    });
-</script>
+            if (password.length < 6) {
+                showError("error-register", "La password deve essere di almeno 6 caratteri");
+                return;
+            }
+
+            try {
+                const res = await fetch("/auth/register", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ email, password })
+                });
+                const data = await res.json();
+
+                if (!data.success) {
+                    showError("error-register", data.message);
+                    return;
+                }
+
+                window.location.href = "/view/action.html";
+            } catch (err) {
+                showError("error-register", "Errore di connessione al server");
+            }
+        }
+
+        // Invio con tasto Enter
+        document.addEventListener("keydown", (e) => {
+            if (e.key !== "Enter") return;
+            const loginActive = document.getElementById("section-login").classList.contains("active");
+            if (loginActive) doLogin();
+            else doRegister();
+        });
+    </script>
 </body>
+
 </html>
