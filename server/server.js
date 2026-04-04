@@ -67,7 +67,6 @@ function getRooms() {
     return roomList;
 }
 
-// Costruisce la lista giocatori con nomi da mandare al client
 async function getPlayersWithNames(room) {
     const players = [];
     for (const socketId of room.players) {
@@ -94,11 +93,7 @@ function debugRooms(msg) {
 }
 
 function resolveTies(playersWithRolls, resolved = []) {
-    // playersWithRolls: array of {socketId, roll}
-    // Sort by roll descending
     playersWithRolls.sort((a, b) => b.roll - a.roll);
-
-    // Group by roll
     const groups = [];
     let currentGroup = [playersWithRolls[0]];
     for (let i = 1; i < playersWithRolls.length; i++) {
@@ -110,31 +105,25 @@ function resolveTies(playersWithRolls, resolved = []) {
         }
     }
     groups.push(currentGroup);
-
-    // For each group, if size > 1, reroll recursively, else add to resolved
     for (const group of groups) {
         if (group.length === 1) {
             resolved.push(group[0]);
         } else {
-            // Reroll
             const rerolled = group.map(p => ({ ...p, roll: Math.floor(Math.random() * 6) + 1 }));
             resolveTies(rerolled, resolved);
         }
     }
-
     return resolved;
 }
 
 io.on("connection", (socket) => {
     socket.emit("welcome", "Welcome to Dominium!");
-
     socket.emit("provinces_data", provinces);
 
     socket.on("set_name", (name) => {
         if (!name || typeof name !== "string") return;
         socket.request.session.userName = name.trim().substring(0, 20);
         socket.request.session.save(() => {
-            // Aggiorna la lista giocatori nella stanza se è già dentro
             const roomId = socket.request.session.roomId;
             if (roomId) emitPlayersUpdated(roomId);
         });
@@ -146,23 +135,19 @@ io.on("connection", (socket) => {
 
     socket.on("create_room", () => {
         const roomId = generateRoomId();
-
         if (roomId === null) {
             socket.emit("error", { message: "Numero massimo di stanze raggiunto" });
             return;
         }
-
         const roomCode = generateRoomCode();
-
         rooms.set(roomId, {
             room_code: roomCode,
             map_id: null,
             players: [socket.id],
             readyPlayers: new Set(),
-            selectedContinents: new Map(), // continente -> socketId
-            gameCountdown: null // timer per il countdown di inizio gioco
+            selectedContinents: new Map(),
+            gameCountdown: null
         });
-
         socket.join(roomId);
         socket.request.session.roomId = roomId;
         socket.request.session.save((err) => {
@@ -175,21 +160,9 @@ io.on("connection", (socket) => {
 
     socket.on("join_room", (roomId, roomCode) => {
         const room = rooms.get(roomId);
-
-        if (!room) {
-            socket.emit("error", { message: "Stanza non trovata" });
-            return;
-        }
-
-        if (room.room_code !== roomCode.toUpperCase()) {
-            socket.emit("error", { message: "Codice stanza errato" });
-            return;
-        }
-
-        if (room.players.length >= 4) {
-            socket.emit("error", { message: "Stanza piena" });
-            return;
-        }
+        if (!room) { socket.emit("error", { message: "Stanza non trovata" }); return; }
+        if (room.room_code !== roomCode.toUpperCase()) { socket.emit("error", { message: "Codice stanza errato" }); return; }
+        if (room.players.length >= 4) { socket.emit("error", { message: "Stanza piena" }); return; }
 
         room.players.push(socket.id);
         socket.join(roomId);
@@ -199,14 +172,11 @@ io.on("connection", (socket) => {
             room.selectedContinents.set(savedContinent, playerName);
         }
         socket.request.session.roomId = roomId;
-
         socket.request.session.save((err) => {
             if (err) console.error("[JOIN] Errore salvataggio sessione:", err);
             socket.emit("room_joined", { roomId, roomCode: room.room_code });
             io.emit("rooms_updated");
             emitPlayersUpdated(roomId);
-
-            // Notifica continenti selezionati a tutti i giocatori
             room.players.forEach(playerId => {
                 const playerSocket = io.sockets.sockets.get(playerId);
                 if (playerSocket) {
@@ -221,29 +191,20 @@ io.on("connection", (socket) => {
 
     socket.on("rejoin_room", ({ roomId } = {}) => {
         if (!roomId) return;
-
         const room = rooms.get(roomId);
         if (!room) return;
-
         for (const key of [roomId]) {
             if (deleteTimers.has(key)) {
                 clearTimeout(deleteTimers.get(key));
                 deleteTimers.delete(key);
             }
         }
-
-        if (!room.players.includes(socket.id)) {
-            room.players.push(socket.id);
-        }
-
+        if (!room.players.includes(socket.id)) room.players.push(socket.id);
         if (!room.readyPlayers) room.readyPlayers = new Set();
-
         socket.join(roomId);
         socket.emit("rejoined", { roomId });
         io.emit("rooms_updated");
         emitPlayersUpdated(roomId);
-
-        // Notifica continenti selezionati a tutti i giocatori
         room.players.forEach(playerId => {
             const playerSocket = io.sockets.sockets.get(playerId);
             if (playerSocket) {
@@ -258,37 +219,26 @@ io.on("connection", (socket) => {
     socket.on("player_ready", ({ roomId, ready }) => {
         const room = rooms.get(roomId);
         if (!room) return;
-
         if (!room.readyPlayers) room.readyPlayers = new Set();
-
         const readyName = socket.request.session.userName;
         if (ready && !Array.from(room.selectedContinents.values()).includes(readyName)) {
             socket.emit("error", { message: "Devi selezionare un continente prima di metterti pronto" });
             return;
         }
-
         if (ready) {
             room.readyPlayers.add(socket.id);
         } else {
             room.readyPlayers.delete(socket.id);
-            // Se qualcuno si "unready", cancella il countdown se attivo
             if (room.gameCountdown) {
                 clearTimeout(room.gameCountdown);
                 room.gameCountdown = null;
                 io.to(roomId).emit("countdown_stop");
             }
         }
-
         emitPlayersUpdated(roomId);
-
-        // Controlla se tutti i 4 giocatori sono pronti
         if (room.players.length === 4 && room.readyPlayers.size === 4) {
-            ///////////////////////4
-            // Avvia countdown di 3 secondi
             io.to(roomId).emit("game_countdown_start", { seconds: 3 });
-
             room.gameCountdown = setTimeout(() => {
-                // Alla fine del countdown, avvia il gioco
                 io.to(roomId).emit("game_start");
                 room.isRollingForTroops = true;
                 room.gameStarted = true;
@@ -300,25 +250,13 @@ io.on("connection", (socket) => {
     socket.on("select_continent", ({ roomId, continent }) => {
         const room = rooms.get(roomId);
         if (!room) return;
-
         const playerName = socket.request.session.userName;
-        console.log("[select_continent] playerName:", playerName, "continent:", continent);
-
-        // Rimuovi selezione precedente di questo giocatore
         for (const [cont, name] of room.selectedContinents) {
-            if (name === playerName) {
-                room.selectedContinents.delete(cont);
-            }
+            if (name === playerName) room.selectedContinents.delete(cont);
         }
-
-        if (!room.selectedContinents.has(continent)) {
-            room.selectedContinents.set(continent, playerName);
-        }
-
+        if (!room.selectedContinents.has(continent)) room.selectedContinents.set(continent, playerName);
         socket.request.session.selectedContinent = continent;
         socket.request.session.save();
-
-        // Notifica tutti
         room.players.forEach(playerId => {
             const playerSocket = io.sockets.sockets.get(playerId);
             if (playerSocket) {
@@ -329,7 +267,6 @@ io.on("connection", (socket) => {
                 });
             }
         });
-        console.log("[select_continent] dopo set:", Object.fromEntries(room.selectedContinents));
     });
 
     socket.on("edit_room_name", (roomName, roomId) => {
@@ -342,27 +279,19 @@ io.on("connection", (socket) => {
     socket.on("leave_room", ({ roomId }) => {
         const room = rooms.get(roomId);
         if (!room) return;
-
         room.players = room.players.filter(p => p !== socket.id);
         room.readyPlayers?.delete(socket.id);
-
-        // Cancella countdown se attivo
         if (room.gameCountdown) {
             clearTimeout(room.gameCountdown);
             room.gameCountdown = null;
             io.to(roomId).emit("countdown_stop");
         }
-
         if (!room.gameStarted) {
             const leavingName = socket.request.session.userName;
             for (const [continent, name] of room.selectedContinents) {
-                if (name === leavingName) {
-                    room.selectedContinents.delete(continent);
-                }
+                if (name === leavingName) room.selectedContinents.delete(continent);
             }
         }
-
-        // Se nessuno rimane nella stanza, elimina la stanza
         if (room.players.length === 0) {
             const timer = setTimeout(() => {
                 if (rooms.has(roomId) && rooms.get(roomId).players.length === 0) {
@@ -376,10 +305,8 @@ io.on("connection", (socket) => {
             emitPlayersUpdated(roomId);
             io.emit("rooms_updated");
         }
-
         socket.request.session.roomId = null;
         socket.request.session.save();
-
         debugRooms(`after leave_room ${roomId}, socket ${socket.id}`);
     });
 
@@ -388,21 +315,14 @@ io.on("connection", (socket) => {
             if (!room.players.includes(socket.id)) return;
             room.players = room.players.filter(p => p !== socket.id);
             room.readyPlayers?.delete(socket.id);
-
-            // Cancella countdown se attivo
             if (room.gameCountdown) {
                 clearTimeout(room.gameCountdown);
                 room.gameCountdown = null;
                 io.to(roomId).emit("countdown_stop");
             }
-
-            // Rimuovi selezioni continenti del giocatore
             for (const [continent, playerId] of room.selectedContinents) {
-                if (playerId === socket.id) {
-                    room.selectedContinents.delete(continent);
-                }
+                if (playerId === socket.id) room.selectedContinents.delete(continent);
             }
-
             emitPlayersUpdated(roomId);
             if (room.players.length === 0) {
                 const timer = setTimeout(() => {
@@ -415,304 +335,441 @@ io.on("connection", (socket) => {
                 deleteTimers.set(roomId, timer);
             }
         });
-
         setTimeout(() => io.emit("rooms_updated"), 100);
         debugRooms(`after disconnect ${socket.id}`);
     });
 
     // --- GAME LOGIC ---
+
     socket.on("get_attackable_provinces", ({ provinceId, roomId }) => {
         const room = rooms.get(roomId);
         if (!room) return;
-
-        // verifica che sia il turno del giocatore
         if (room.turnOrder[room.currentTurnIndex] !== socket.id) return;
-
         const player = room.turnOrderDetails.find(p => p.socketId === socket.id);
         if (!player) return;
-
-        // la provincia attaccante deve essere tua e avere almeno 2 truppe
         const attacker = room.provinces[provinceId];
         if (!attacker || attacker.owner !== player.name) return;
-        if (attacker.troops < 2) {
-            socket.emit("error", { message: "Hai bisogno di almeno 2 truppe per attaccare" });
+        if (attacker.troops < 1) {
+            socket.emit("error", { message: "Hai bisogno di almeno 1 truppa per attaccare" });
             return;
         }
-
         const neighbors = borders[provinceId] || [];
         const attackable = neighbors.filter(id => {
             const p = room.provinces[id];
-            // attaccabile se esiste ed è di qualcun altro
             return p && p.owner && p.owner !== player.name;
         });
-
         socket.emit("attackable_provinces", { fromProvinceId: provinceId, attackable });
     });
 
     socket.on("attack", ({ fromProvinceId, toProvinceId, roomId }) => {
         const room = rooms.get(roomId);
         if (!room) return;
-
-        // controlli di sicurezza
         if (room.turnOrder[room.currentTurnIndex] !== socket.id) return;
-
         const attackerPlayer = room.turnOrderDetails.find(p => p.socketId === socket.id);
         if (!attackerPlayer) return;
-
         const attacker = room.provinces[fromProvinceId];
         const defender = room.provinces[toProvinceId];
-
         if (!attacker || !defender) return;
         if (attacker.owner !== attackerPlayer.name) return;
         if (defender.owner === attackerPlayer.name) return;
-        if (attacker.troops < 2) {
-            socket.emit("error", { message: "Hai bisogno di almeno 2 truppe per attaccare" });
+        if (attacker.troops < 1) {
+            socket.emit("error", { message: "Hai bisogno di almeno 1 truppa per attaccare" });
             return;
         }
-
-        // verifica adiacenza
         const neighbors = borders[fromProvinceId] || [];
         if (!neighbors.includes(toProvinceId)) {
             socket.emit("error", { message: "Province non confinanti" });
             return;
         }
-
-        // Trova il difensore
         const defenderPlayer = room.turnOrderDetails.find(p => p.name === defender.owner);
         if (!defenderPlayer) return;
 
-        // Implementa logica corretta di attacco con dadi
-        const attackerDices = rollDice(Math.min(3, attacker.troops - 1));
-        const defenderDices = rollDice(Math.min(2, defender.troops));
+        const maxAttackerDice = Math.min(3, Math.max(1, attacker.troops));
+        const maxDefenderDice = Math.min(2, Math.max(1, defender.troops));
 
-        // Ordina i dadi in ordine decrescente
-        attackerDices.sort((a, b) => b - a);
-        defenderDices.sort((a, b) => b - a);
+        room.pendingBattle = {
+            fromProvinceId,
+            toProvinceId,
+            attackerSocketId: socket.id,
+            defenderSocketId: defenderPlayer.socketId,
+            attackerName: attackerPlayer.name,
+            defenderName: defenderPlayer.name,
+            maxAttackerDice,
+            maxDefenderDice,
+            attackerRolls: null,
+            defenderRolls: null,
+        };
+
+        socket.emit("battle_roll_request", {
+            role: "attacker",
+            maxDice: maxAttackerDice,
+            attackerName: attackerPlayer.name,
+            defenderName: defenderPlayer.name,
+            fromProvinceId,
+            toProvinceId,
+            attackerTroops: attacker.troops,
+            defenderTroops: defender.troops,
+        });
+
+        const defenderSocket = io.sockets.sockets.get(defenderPlayer.socketId);
+        if (defenderSocket) {
+            defenderSocket.emit("battle_roll_request", {
+                role: "defender",
+                maxDice: maxDefenderDice,
+                attackerName: attackerPlayer.name,
+                defenderName: defenderPlayer.name,
+                fromProvinceId,
+                toProvinceId,
+                attackerTroops: attacker.troops,
+                defenderTroops: defender.troops,
+            });
+        }
+
+        io.to(roomId).emit("battle_started", {
+            attackerName: attackerPlayer.name,
+            defenderName: defenderPlayer.name,
+            fromProvinceId,
+            toProvinceId,
+            attackerTroops: attacker.troops,
+            defenderTroops: defender.troops,
+        });
+    });
+
+    socket.on("submit_battle_rolls", ({ roomId, rolls }) => {
+        const room = rooms.get(roomId);
+        if (!room || !room.pendingBattle) return;
+
+        const battle = room.pendingBattle;
+        const isAttacker = socket.id === battle.attackerSocketId;
+        const isDefender = socket.id === battle.defenderSocketId;
+        if (!isAttacker && !isDefender) return;
+
+        const maxDice = isAttacker ? battle.maxAttackerDice : battle.maxDefenderDice;
+        if (!Array.isArray(rolls) || rolls.length < 1 || rolls.length > maxDice) return;
+        if (rolls.some(r => r < 1 || r > 6)) return;
+
+        if (isAttacker) battle.attackerRolls = rolls;
+        if (isDefender) battle.defenderRolls = rolls;
+
+        io.to(roomId).emit("battle_player_rolled", {
+            role: isAttacker ? "attacker" : "defender",
+            name: isAttacker ? battle.attackerName : battle.defenderName,
+        });
+
+        if (!battle.attackerRolls || !battle.defenderRolls) return;
+
+        // ── Risolvi battaglia ──
+        const attackerDices = [...battle.attackerRolls].sort((a, b) => b - a);
+        const defenderDices = [...battle.defenderRolls].sort((a, b) => b - a);
 
         let attackerLosses = 0;
         let defenderLosses = 0;
-
-        // Confronta i dadi a coppie
         const rounds = Math.min(attackerDices.length, defenderDices.length);
         for (let i = 0; i < rounds; i++) {
-            if (attackerDices[i] > defenderDices[i]) {
-                defenderLosses++;
-            } else {
-                attackerLosses++;
-            }
+            if (attackerDices[i] > defenderDices[i]) defenderLosses++;
+            else attackerLosses++;
         }
 
-        // Applica i danni
+        const attacker = room.provinces[battle.fromProvinceId];
+        const defender = room.provinces[battle.toProvinceId];
+        const attackerPlayer = room.turnOrderDetails.find(p => p.socketId === battle.attackerSocketId);
+        const defenderPlayer = room.turnOrderDetails.find(p => p.name === battle.defenderName);
+
         attacker.troops -= attackerLosses;
         defender.troops -= defenderLosses;
-
-        // Se il difensore ha 0 truppe, l'attaccante conquista
-        let provinceConquered = false;
-        if (defender.troops <= 0) {
-            provinceConquered = true;
-            // Trasferisce le truppe rimanenti (escludendo almeno 1 che rimane nella provincia d'origine)
-            const conqueringTroops = Math.max(1, attacker.troops - 1);
-            defender.owner = attackerPlayer.name;
-            defender.troops = conqueringTroops;
-            attacker.troops = Math.max(1, attacker.troops - conqueringTroops);
-        }
-
-        // Aggiorna le truppe totali dei giocatori
         attackerPlayer.troops -= attackerLosses;
         defenderPlayer.troops -= defenderLosses;
 
-        // Notifica gli aggiornamenti delle province
-        io.to(roomId).emit("province_updated", {
-            provinceId: fromProvinceId,
-            troops: attacker.troops,
-            ownerName: attacker.owner
-        });
-        io.to(roomId).emit("province_updated", {
-            provinceId: toProvinceId,
-            troops: defender.troops,
-            ownerName: defender.owner
-        });
+        if (attacker.troops < 0) attacker.troops = 0;
+        if (defender.troops < 0) defender.troops = 0;
 
-        // Notifica i risultati della battaglia
-        io.to(roomId).emit("attack_result", {
-            winner: defenderLosses > attackerLosses ? "attacker" : "defender",
-            fromProvinceId,
-            toProvinceId,
-            attackerName: attackerPlayer.name,
-            defenderName: defenderPlayer.name,
-            attackerDices,
-            defenderDices,
-            attackerLosses,
-            defenderLosses,
-            provinceConquered
-        });
+        // ── CASO B: l'attaccante perde tutte le truppe → il difensore conquista la provincia ──
+        if (attacker.troops <= 0) {
+            attacker.troops = 0;
+            const prevOwner = attacker.owner;
+            attacker.owner = defenderPlayer.name;
 
-        // Notifica aggiornamento truppe totali ai giocatori interessati
-        const attackerSocket = io.sockets.sockets.get(socket.id);
-        if (attackerSocket) {
-            attackerSocket.emit("player_troops_updated", {
-                playerName: attackerPlayer.name,
-                troopsRemaining: attackerPlayer.troops
+            // Calcola quante truppe il difensore può spostare dalla sua provincia (toProvinceId)
+            const defenderTroopsAvailable = defender.troops;
+
+            let defenderAutoMoved = false;
+            let defenderMinMovable = 0;
+            let defenderMaxMovable = 0;
+
+            if (defenderTroopsAvailable <= 1) {
+                // Truppa "regalata": rimane 1 nella provincia di difesa, 1 va nella conquistata
+                // Se il difensore aveva 1 truppa in difesa, ne riceve 1 bonus
+                defender.troops = 1;           // rimane 1 nella provincia difesa
+                attacker.troops = 1;           // 1 "regalata" nella provincia conquistata
+                defenderAutoMoved = true;
+            } else {
+                // Slider: può spostare da 1 a troops-1 (deve lasciarne almeno 1)
+                defenderMinMovable = 1;
+                defenderMaxMovable = defenderTroopsAvailable - 1;
+                // Le truppe non vengono ancora spostate, aspettiamo confirm
+            }
+
+            io.to(roomId).emit("attack_result", {
+                winner: "defender",
+                fromProvinceId: battle.fromProvinceId,
+                toProvinceId: battle.toProvinceId,
+                attackerName: battle.attackerName,
+                defenderName: battle.defenderName,
+                attackerDices,
+                defenderDices,
+                attackerLosses,
+                defenderLosses,
+                provinceConquered: false,
+                autoMoved: false,
+                // Campi specifici per conquista del difensore
+                defenderConqueredAttackerProvince: true,
+                defenderAutoMoved,
+                defenderMinMovable,
+                defenderMaxMovable,
+            });
+
+            io.to(roomId).emit("province_updated", {
+                provinceId: battle.fromProvinceId,
+                troops: attacker.troops,
+                ownerName: attacker.owner   // ora appartiene al difensore
+            });
+            io.to(roomId).emit("province_updated", {
+                provinceId: battle.toProvinceId,
+                troops: defender.troops,
+                ownerName: defender.owner
+            });
+
+            if (!defenderAutoMoved) {
+                // Salva per il confirm dello spostamento truppe del difensore
+                room.pendingDefenderTroopMove = {
+                    fromProvinceId: battle.toProvinceId,      // la provincia di difesa (origine)
+                    toProvinceId: battle.fromProvinceId,      // la provincia conquistata (destinazione)
+                    defenderSocketId: battle.defenderSocketId,
+                    minTroops: defenderMinMovable,
+                    maxTroops: defenderMaxMovable,
+                };
+            }
+
+            room.pendingBattle = null;
+            return;
+        }
+
+        // ── CASO A: il difensore perde tutte le truppe → l'attaccante conquista ──
+        const provinceConquered = defender.troops <= 0;
+        const roundWinner = defenderLosses > attackerLosses ? "attacker" : "defender";
+
+        if (provinceConquered) {
+            defender.owner = attackerPlayer.name;
+            defender.troops = 0;
+
+            if (attacker.troops <= 1) {
+                // Movimento automatico: 1 truppa va nella nuova provincia
+                attacker.troops = 0;
+                defender.troops = 1;
+
+                io.to(roomId).emit("attack_result", {
+                    winner: "attacker",
+                    fromProvinceId: battle.fromProvinceId,
+                    toProvinceId: battle.toProvinceId,
+                    attackerName: battle.attackerName,
+                    defenderName: battle.defenderName,
+                    attackerDices,
+                    defenderDices,
+                    attackerLosses,
+                    defenderLosses,
+                    provinceConquered: true,
+                    autoMoved: true,
+                    maxMovableTroops: 0,
+                    minMovableTroops: 0,
+                    defenderConqueredAttackerProvince: false,
+                });
+
+                io.to(roomId).emit("province_updated", {
+                    provinceId: battle.fromProvinceId,
+                    troops: attacker.troops,
+                    ownerName: attacker.owner
+                });
+                io.to(roomId).emit("province_updated", {
+                    provinceId: battle.toProvinceId,
+                    troops: defender.troops,
+                    ownerName: defender.owner
+                });
+
+                room.pendingBattle = null;
+                return;
+            }
+
+            // Slider spostamento truppe attaccante
+            const minMovable = 1;
+            const maxMovable = attacker.troops - 1;
+
+            io.to(roomId).emit("attack_result", {
+                winner: "attacker",
+                fromProvinceId: battle.fromProvinceId,
+                toProvinceId: battle.toProvinceId,
+                attackerName: battle.attackerName,
+                defenderName: battle.defenderName,
+                attackerDices,
+                defenderDices,
+                attackerLosses,
+                defenderLosses,
+                provinceConquered: true,
+                autoMoved: false,
+                maxMovableTroops: maxMovable,
+                minMovableTroops: minMovable,
+                defenderConqueredAttackerProvince: false,
+            });
+
+            io.to(roomId).emit("province_updated", {
+                provinceId: battle.fromProvinceId,
+                troops: attacker.troops,
+                ownerName: attacker.owner
+            });
+            io.to(roomId).emit("province_updated", {
+                provinceId: battle.toProvinceId,
+                troops: 0,
+                ownerName: attackerPlayer.name
+            });
+
+            room.pendingTroopMove = {
+                fromProvinceId: battle.fromProvinceId,
+                toProvinceId: battle.toProvinceId,
+                attackerSocketId: battle.attackerSocketId,
+                minTroops: minMovable,
+                maxTroops: maxMovable,
+            };
+
+        } else {
+            // Nessuna conquista: round normale
+            io.to(roomId).emit("attack_result", {
+                winner: roundWinner,
+                fromProvinceId: battle.fromProvinceId,
+                toProvinceId: battle.toProvinceId,
+                attackerName: battle.attackerName,
+                defenderName: battle.defenderName,
+                attackerDices,
+                defenderDices,
+                attackerLosses,
+                defenderLosses,
+                provinceConquered: false,
+                autoMoved: false,
+                defenderConqueredAttackerProvince: false,
+            });
+
+            io.to(roomId).emit("province_updated", {
+                provinceId: battle.fromProvinceId,
+                troops: attacker.troops,
+                ownerName: attacker.owner
+            });
+            io.to(roomId).emit("province_updated", {
+                provinceId: battle.toProvinceId,
+                troops: defender.troops,
+                ownerName: defender.owner
             });
         }
 
-        const defenderSocket = Array.from(io.sockets.sockets.values()).find(s => s.request.session.userName === defenderPlayer.name && room.players.includes(s.id));
-        if (defenderSocket) {
-            defenderSocket.emit("player_troops_updated", {
-                playerName: defenderPlayer.name,
-                troopsRemaining: defenderPlayer.troops
-            });
-            // Notifica al difensore che è stato attaccato
-            defenderSocket.emit("under_attack", {
-                attackerName: attackerPlayer.name,
-                fromProvinceId,
-                toProvinceId
-            });
-        }
+        room.pendingBattle = null;
+    });
+
+    // Spostamento truppe attaccante dopo conquista (Caso A)
+    socket.on("confirm_troop_move", ({ roomId, troops }) => {
+        const room = rooms.get(roomId);
+        if (!room || !room.pendingTroopMove) return;
+        const move = room.pendingTroopMove;
+        if (socket.id !== move.attackerSocketId) return;
+
+        const count = Math.max(move.minTroops, Math.min(move.maxTroops, Number(troops)));
+        const fromProvince = room.provinces[move.fromProvinceId];
+        const toProvince = room.provinces[move.toProvinceId];
+
+        fromProvince.troops -= count;
+        toProvince.troops += count;
+
+        io.to(roomId).emit("province_updated", {
+            provinceId: move.fromProvinceId,
+            troops: fromProvince.troops,
+            ownerName: fromProvince.owner
+        });
+        io.to(roomId).emit("province_updated", {
+            provinceId: move.toProvinceId,
+            troops: toProvince.troops,
+            ownerName: toProvince.owner
+        });
+
+        room.pendingTroopMove = null;
+    });
+
+    // Spostamento truppe difensore dopo conquista (Caso B)
+    socket.on("confirm_defender_troop_move", ({ roomId, troops }) => {
+        const room = rooms.get(roomId);
+        if (!room || !room.pendingDefenderTroopMove) return;
+        const move = room.pendingDefenderTroopMove;
+        if (socket.id !== move.defenderSocketId) return;
+
+        const count = Math.max(move.minTroops, Math.min(move.maxTroops, Number(troops)));
+        const fromProvince = room.provinces[move.fromProvinceId]; // provincia difesa
+        const toProvince = room.provinces[move.toProvinceId];     // provincia conquistata
+
+        fromProvince.troops -= count;
+        toProvince.troops += count;
+
+        io.to(roomId).emit("province_updated", {
+            provinceId: move.fromProvinceId,
+            troops: fromProvince.troops,
+            ownerName: fromProvince.owner
+        });
+        io.to(roomId).emit("province_updated", {
+            provinceId: move.toProvinceId,
+            troops: toProvince.troops,
+            ownerName: toProvince.owner
+        });
+
+        room.pendingDefenderTroopMove = null;
     });
 
     socket.on("win_chance", ({ attackerTroops, defenderTroops }) => {
         const winner = resolveBattle(attackerTroops, defenderTroops);
-
         socket.emit("battle_result", { winner });
     });
 
     socket.on("roll_for_turn_order", (payload = {}) => {
         const roomId = String(payload.roomId || socket.request?.session?.roomId || "");
-        debugRooms(`[roll_for_turn_order start] socket:${socket.id} payloadRoom:${payload.roomId} sessionRoom:${socket.request?.session?.roomId}`);
-        console.log("[roll_for_turn_order] roomId:", roomId, "socketRooms:", Array.from(socket.rooms));
-
         let room = rooms.get(roomId);
         if (!room) {
             const fallbackRoom = Array.from(socket.rooms).find(r => r !== socket.id);
-            if (fallbackRoom && rooms.has(fallbackRoom)) {
-                room = rooms.get(fallbackRoom);
-                console.log("[roll_for_turn_order] fallbackRoom:", fallbackRoom);
-            }
+            if (fallbackRoom && rooms.has(fallbackRoom)) room = rooms.get(fallbackRoom);
         }
-
-        if (!room) {
-            console.error("[roll_for_turn_order] stanza non trovata", { roomId, socketRooms: Array.from(socket.rooms) });
-            socket.emit("error", { message: "Stanza non trovata" });
-            return;
-        }
-
+        if (!room) { socket.emit("error", { message: "Stanza non trovata" }); return; }
         const effectiveRoomId = roomId || Array.from(socket.rooms).find(r => r !== socket.id);
         socket.request.session.roomId = effectiveRoomId;
         socket.request.session.save(() => { });
-
         if (!room.turnOrderRolls) room.turnOrderRolls = {};
-
-        // Ignore duplicate rolls
         if (room.turnOrderRolls[socket.id]) return;
-
         const roll = Math.floor(Math.random() * 6) + 1;
         room.turnOrderRolls[socket.id] = roll;
-
         const playerName = socket.request.session.userName || socket.id;
         io.to(effectiveRoomId).emit("player_rolled", { socketId: socket.id, name: playerName, roll });
-
-        // Wait for all players
         const totalPlayers = room.players.length;
         const totalRolled = Object.keys(room.turnOrderRolls).length;
-
-        if (totalRolled === totalPlayers) {
-            try {
-                if (room.isRollingForTroops) {
-                    if (!room.previousRolls) room.previousRolls = {};
-
-                    // Determina se siamo in un "re-roll" per le truppe aggiuntive (dopo il primo ordine)
-                    const isTroopRefill = !!room.turnOrder && room.turnOrder.length > 0;
-
-                    const allRolls = { ...room.turnOrderRolls };
-                    const sorted = Object.entries(allRolls).sort(([, a], [, b]) => b - a);
-
-                    if (!isTroopRefill) {
-                        // === PRIMO LANCIO: stabilisce ordine turni ===
-                        const playersWithRolls = room.players.map(id => ({socketId: id, roll: room.turnOrderRolls[id]}));
-                        const resolved = resolveTies(playersWithRolls);
-
-                        const turnOrderDetails = resolved.map(p => {
-                            const name = io.sockets.sockets.get(p.socketId)?.request?.session?.userName || p.socketId;
-                            const continent = Array.from(room.selectedContinents.entries())
-                                .find(([, n]) => n === name)?.[0] || "";
-                            return { socketId: p.socketId, name, continent, roll: p.roll, troops: troopAssignment(p.roll, 0) };
-                        });
-
-                        room.turnOrder = turnOrderDetails.map(p => p.socketId);
-                        room.turnOrderDetails = turnOrderDetails;
-                        room.currentTurnIndex = 0;
-                        room.turnCount = 0;
-                        room.isRollingForTroops = false;
-                        room.turnOrderRolls = {};
-
-                        io.to(effectiveRoomId).emit("turn_order_decided", {
-                            turnOrder: turnOrderDetails,
-                            playerContinents: Object.fromEntries(room.selectedContinents),
-                        });
-
-                        room.placementDone = new Set();
-                        room.provinces = {};
-                        room.turnOrderDetails.forEach(player => {
-                            const playerSocket = io.sockets.sockets.get(player.socketId);
-                            if (playerSocket) {
-                                playerSocket.emit("placement_start", { troops: player.troops });
-                            }
-                        });
-
-                    } else {
-                        // === LANCI SUCCESSIVI: solo aggiunta truppe, mantiene ordine esistente ===
-                        // Nessun pareggio, nessun riordino — assegna truppe e basta
-                        room.turnOrderDetails.forEach(player => {
-                            const roll = allRolls[player.socketId];
-                            if (roll !== undefined) {
-                                const newTroops = troopAssignment(roll, 0); // parte sempre da 0, aggiungi le nuove
-                                player.troops = (player.troops || 0) + newTroops;
-                                const playerSocket = io.sockets.sockets.get(player.socketId);
-                                if (playerSocket) {
-                                    playerSocket.emit("placement_start", { troops: newTroops }); // manda solo le nuove
-                                }
-                            }
-                        });
-
-                        room.isRollingForTroops = false;
-                        room.turnOrderRolls = {};
-                        room.tiedPlayers = null;
-                        room.previousRolls = null;
-                        room.placementDone = new Set();
-
-                        // Riprende dal turno corrente (non da 0)
-                        io.to(effectiveRoomId).emit("turn", {
-                            currentPlayerId: room.turnOrder[room.currentTurnIndex],
-                            turnOrder: room.turnOrderDetails
-                        });
-                    }
-                }
-            }
-            catch (e) {
-                console.error("[roll_for_turn_order] Errore durante la decisione dell'ordine di turno:", e);
-            }
-        }
+        if (totalRolled < totalPlayers) return;
+        processTurnOrderRolls(room, effectiveRoomId, io);
     });
 
     socket.on("place_troop", ({ provinceId, roomId }) => {
         const room = rooms.get(roomId);
         if (!room) return;
-
         const player = room.turnOrderDetails.find(p => p.socketId === socket.id);
         if (!player) return;
-
         const province = provinces[provinceId];
-        if (!province || province.continent !== player.continent) {
+        const roomProvince = room.provinces[provinceId];
+        const isNativeContinent = province && province.continent === player.continent;
+        const isOwned = roomProvince && roomProvince.owner === player.name;
+        if (!isNativeContinent && !isOwned) {
             socket.emit("error", { message: "Non puoi piazzare truppe qui" });
             return;
         }
-
         if (player.troops <= 0) return;
-
-        if (!room.provinces[provinceId]) {
-            room.provinces[provinceId] = { troops: 0, owner: null };
-        }
+        if (!room.provinces[provinceId]) room.provinces[provinceId] = { troops: 0, owner: null };
         room.provinces[provinceId].troops++;
         room.provinces[provinceId].owner = player.name;
         player.troops--;
@@ -723,31 +780,26 @@ io.on("connection", (socket) => {
             ownerName: player.name,
         });
 
+        // Invia truppe da piazzare rimanenti SOLO al giocatore corrente
         socket.emit("troops_remaining", { troopsToPlaceLeft: player.troops });
 
         if (player.troops <= 0) {
             const isFirstPlacement = room.turnCount === 0;
-
             if (isFirstPlacement) {
                 const continentProvinces = Object.entries(provinces)
                     .filter(([, p]) => p.continent === player.continent)
                     .map(([id]) => id);
-
                 const allCovered = continentProvinces.every(id =>
                     room.provinces[id] && room.provinces[id].troops >= 1
                 );
-
                 if (!allCovered) {
-                    // reset solo al primo piazzamento
                     let refund = 0;
                     continentProvinces.forEach(id => {
                         if (room.provinces[id]) {
                             refund += room.provinces[id].troops;
                             room.provinces[id].troops = 0;
                             room.provinces[id].owner = null;
-                            io.to(roomId).emit("province_updated", {
-                                provinceId: id, troops: 0, ownerName: null
-                            });
+                            io.to(roomId).emit("province_updated", { provinceId: id, troops: 0, ownerName: null });
                         }
                     });
                     player.troops = refund;
@@ -756,7 +808,6 @@ io.on("connection", (socket) => {
                     return;
                 }
             }
-
             room.placementDone.add(socket.id);
             console.log("[place_troop] placementDone size:", room.placementDone.size);
             if (room.placementDone.size === room.turnOrderDetails.length) {
@@ -769,10 +820,66 @@ io.on("connection", (socket) => {
         }
     });
 
+    socket.on("roll_for_tie", (payload = {}) => {
+        const roomId = String(payload.roomId || socket.request?.session?.roomId || "");
+        let room = rooms.get(roomId);
+        if (!room) return;
+        if (!room.currentTiedGroup?.includes(socket.id)) return;
+        if (room.turnOrderRolls[socket.id]) return;
+        const roll = Math.floor(Math.random() * 6) + 1;
+        room.turnOrderRolls[socket.id] = roll;
+        const playerName = socket.request.session.userName || socket.id;
+        io.to(roomId).emit("player_rolled", { socketId: socket.id, name: playerName, roll });
+        if (Object.keys(room.turnOrderRolls).length < room.currentTiedGroup.length) return;
+
+        const allRolls = { ...room.turnOrderRolls };
+        const groups = {};
+        for (const [id, r] of Object.entries(allRolls)) {
+            if (!groups[r]) groups[r] = [];
+            groups[r].push(id);
+        }
+        const stillTied = Object.entries(groups).filter(([, ids]) => ids.length > 1);
+        const resolved = Object.entries(groups).filter(([, ids]) => ids.length === 1);
+        for (const [roll, [socketId]] of resolved.sort(([a], [b]) => Number(b) - Number(a))) {
+            const name = io.sockets.sockets.get(socketId)?.request?.session?.userName || socketId;
+            const continent = Array.from(room.selectedContinents.entries()).find(([, n]) => n === name)?.[0] || "";
+            room.resolvedOrder.push({ socketId, name, continent, roll: Number(roll) });
+        }
+        if (stillTied.length > 0) {
+            const [tiedRoll, tiedIds] = stillTied[0];
+            const tiedPlayers = tiedIds.map(socketId => {
+                const name = io.sockets.sockets.get(socketId)?.request?.session?.userName || socketId;
+                return { socketId, name };
+            });
+            room.currentTiedGroup = tiedIds;
+            room.turnOrderRolls = {};
+            io.to(roomId).emit("tie_detected", {
+                tiedPlayers,
+                tiedRoll: Number(tiedRoll),
+                allRolls: Object.fromEntries(Object.entries(allRolls).map(([id, r]) => {
+                    const name = io.sockets.sockets.get(id)?.request?.session?.userName || id;
+                    return [id, { name, roll: r }];
+                }))
+            });
+            return;
+        }
+        if (room.pendingTiedGroups?.length > 0) {
+            const [nextRoll, nextIds] = room.pendingTiedGroups.shift();
+            const tiedPlayers = nextIds.map(socketId => {
+                const name = io.sockets.sockets.get(socketId)?.request?.session?.userName || socketId;
+                return { socketId, name };
+            });
+            room.currentTiedGroup = nextIds;
+            room.turnOrderRolls = {};
+            io.to(roomId).emit("tie_detected", { tiedPlayers, tiedRoll: Number(nextRoll), allRolls: {} });
+            return;
+        }
+        finalizeTurnOrder(room, roomId, io, {});
+    });
+
     socket.on("check_turn_order_status", ({ roomId }) => {
         const room = rooms.get(roomId);
         if (!room) return;
-        // Ritorna true se i turni sono già stati decisi
         const isDecided = !!room.turnOrder && room.turnOrder.length > 0;
         socket.emit("turn_order_status", { isDecided, turnOrder: room.turnOrder || [] });
     });
@@ -781,9 +888,7 @@ io.on("connection", (socket) => {
         const room = rooms.get(roomId);
         if (!room) return;
         if (room.turnOrder[room.currentTurnIndex] !== socket.id) return;
-
         room.currentTurnIndex = (room.currentTurnIndex + 1) % room.turnOrder.length;
-
         if (room.currentTurnIndex === 0) {
             room.turnCount++;
             if (room.turnCount % 3 === 0) {
@@ -794,7 +899,6 @@ io.on("connection", (socket) => {
                 io.to(roomId).emit("troop_roll_start");
             }
         }
-
         io.to(roomId).emit("turn", {
             currentPlayerId: room.turnOrder[room.currentTurnIndex],
             turnOrder: room.turnOrderDetails
@@ -804,46 +908,103 @@ io.on("connection", (socket) => {
     socket.on("roll_for_troops", ({ roomId, roll }) => {
         const room = rooms.get(roomId);
         if (!room || !room.troopRolls) return;
-
-        if (room.troopRolls[socket.id]) return; // già tirato
-
+        if (room.troopRolls[socket.id]) return;
         room.troopRolls[socket.id] = roll;
-
         const playerName = socket.request.session.userName;
         io.to(roomId).emit("player_troop_rolled", { socketId: socket.id, name: playerName, roll });
-
-        // quando tutti hanno tirato
         if (Object.keys(room.troopRolls).length === room.players.length) {
-            // assegna truppe
             room.turnOrderDetails.forEach(player => {
-                const roll = room.troopRolls[player.socketId];
-                const newTroops = troopAssignment(roll, player.troops);
-                if (newTroops !== null) {
-                    player.troops = newTroops;
-                }
+                const r = room.troopRolls[player.socketId];
+                const newTroops = troopAssignment(r, player.troops);
+                if (newTroops !== null) player.troops = newTroops;
             });
-
-            // emette placement_start per ogni giocatore
             room.turnOrderDetails.forEach(player => {
-                const socket = io.sockets.sockets.get(player.socketId);
-                if (socket) {
-                    socket.emit("placement_start", { troops: player.troops });
-                }
+                const s = io.sockets.sockets.get(player.socketId);
+                if (s) s.emit("placement_start", { troops: player.troops });
             });
-
-            // reset
             delete room.troopRolls;
             room.isRollingForTroops = false;
         }
     });
 });
 
-// Tira i dadi (da 1 a numDice dadi)
+function processTurnOrderRolls(room, roomId, io) {
+    const allRolls = { ...room.turnOrderRolls };
+    const groups = {};
+    for (const [socketId, roll] of Object.entries(allRolls)) {
+        if (!groups[roll]) groups[roll] = [];
+        groups[roll].push(socketId);
+    }
+    const tiedGroups = Object.entries(groups).filter(([, ids]) => ids.length > 1);
+    if (tiedGroups.length > 0) {
+        if (!room.resolvedOrder) room.resolvedOrder = [];
+        const soloEntries = Object.entries(groups)
+            .filter(([, ids]) => ids.length === 1)
+            .sort(([a], [b]) => Number(b) - Number(a));
+        for (const [roll, [socketId]] of soloEntries) {
+            const name = io.sockets.sockets.get(socketId)?.request?.session?.userName || socketId;
+            const continent = Array.from(room.selectedContinents.entries()).find(([, n]) => n === name)?.[0] || "";
+            room.resolvedOrder.push({ socketId, name, continent, roll: Number(roll) });
+        }
+        const sortedTiedGroups = tiedGroups.sort(([a], [b]) => Number(b) - Number(a));
+        const [tiedRoll, tiedIds] = sortedTiedGroups[0];
+        const tiedPlayers = tiedIds.map(socketId => {
+            const name = io.sockets.sockets.get(socketId)?.request?.session?.userName || socketId;
+            return { socketId, name };
+        });
+        room.pendingTiedGroups = sortedTiedGroups.slice(1);
+        room.currentTiedGroup = tiedIds;
+        room.turnOrderRolls = {};
+        io.to(roomId).emit("tie_detected", {
+            tiedPlayers,
+            tiedRoll: Number(tiedRoll),
+            allRolls: Object.fromEntries(Object.entries(allRolls).map(([id, r]) => {
+                const name = io.sockets.sockets.get(id)?.request?.session?.userName || id;
+                return [id, { name, roll: r }];
+            }))
+        });
+        return;
+    }
+    finalizeTurnOrder(room, roomId, io, allRolls);
+}
+
+function finalizeTurnOrder(room, roomId, io, allRolls) {
+    const resolved = room.resolvedOrder || [];
+    for (const [socketId, roll] of Object.entries(allRolls)) {
+        if (!resolved.find(p => p.socketId === socketId)) {
+            const name = io.sockets.sockets.get(socketId)?.request?.session?.userName || socketId;
+            const continent = Array.from(room.selectedContinents.entries()).find(([, n]) => n === name)?.[0] || "";
+            resolved.push({ socketId, name, continent, roll });
+        }
+    }
+    const turnOrderDetails = resolved.map(p => ({
+        ...p,
+        troops: troopAssignment(p.roll, 0)
+    }));
+    room.turnOrder = turnOrderDetails.map(p => p.socketId);
+    room.turnOrderDetails = turnOrderDetails;
+    room.currentTurnIndex = 0;
+    room.turnCount = 0;
+    room.isRollingForTroops = false;
+    room.turnOrderRolls = {};
+    room.resolvedOrder = null;
+    room.pendingTiedGroups = null;
+    room.currentTiedGroup = null;
+    io.to(roomId).emit("turn_order_decided", {
+        turnOrder: turnOrderDetails,
+        playerContinents: Object.fromEntries(room.selectedContinents),
+    });
+    room.placementDone = new Set();
+    room.provinces = {};
+    room.turnOrderDetails.forEach(player => {
+        const playerSocket = io.sockets.sockets.get(player.socketId);
+        if (playerSocket) playerSocket.emit("placement_start", { troops: player.troops });
+    });
+}
+
 function rollDice(numDice) {
     const dices = [];
-    for (let i = 0; i < numDice; i++) {
-        dices.push(Math.floor(Math.random() * 6) + 1);
-    }
+    for (let i = 0; i < numDice; i++) dices.push(Math.floor(Math.random() * 6) + 1);
     return dices;
 }
 
@@ -869,38 +1030,18 @@ function scheduleDeleteRoom(roomId) {
         deleteTimers.delete(roomId);
         io.emit("rooms_updated");
         debugRooms(`rooms.delete(${roomId}) timeout`);
-    }, 5000); // o 10000
+    }, 5000);
     deleteTimers.set(roomId, timer);
 }
 
 function troopAssignment(roll, playerTroops) {
-    let totalTroops = playerTroops;
-    let troopsAssigned = false;
     switch (roll) {
-        case 1:
-        case 2:
-            totalTroops = playerTroops + 4;
-            troopsAssigned = true;
-            break;
-        case 3:
-        case 4:
-            totalTroops = playerTroops + 5;
-            troopsAssigned = true;
-            break;
-        case 5:
-            totalTroops = playerTroops + 6;
-            troopsAssigned = true;
-            break;
-        case 6:
-            totalTroops = playerTroops + 7;
-            troopsAssigned = true;
-            break;
-    }
-    if (troopsAssigned) {
-        console.log(`Truppe assegnate: ${totalTroops} (base: ${playerTroops}, roll: ${roll})`);
-        return totalTroops;
-    } else {
-        console.warn("Roll non disponibile per assegnazione truppe");
-        return null;
+        case 1: case 2: return playerTroops + 4;
+        case 3: case 4: return playerTroops + 5;
+        case 5: return playerTroops + 6;
+        case 6: return playerTroops + 7;
+        default:
+            console.warn("Roll non disponibile per assegnazione truppe");
+            return null;
     }
 }
