@@ -224,6 +224,20 @@ io.on("connection", (socket) => {
         if (!room.players.includes(socket.id)) room.players.push(socket.id);
         if (!room.readyPlayers) room.readyPlayers = new Set();
         socket.join(roomId);
+        // Aggiorna socketId nel turnOrderDetails se il gioco è già iniziato
+        if (room.gameStarted && room.turnOrderDetails) {
+            const playerName = socket.request.session.userName;
+            const playerDetail = room.turnOrderDetails.find(p => p.name === playerName);
+            if (playerDetail) {
+                // Aggiorna il vecchio socketId con quello nuovo
+                const oldSocketId = playerDetail.socketId;
+                playerDetail.socketId = socket.id;
+                if (room.turnOrder) {
+                    const idx = room.turnOrder.indexOf(oldSocketId);
+                    if (idx !== -1) room.turnOrder[idx] = socket.id;
+                }
+            }
+        }
         socket.emit("rejoined", { roomId });
         io.emit("rooms_updated");
         emitPlayersUpdated(roomId);
@@ -914,6 +928,53 @@ io.on("connection", (socket) => {
             return;
         }
         finalizeTurnOrder(room, roomId, io, {});
+    });
+
+    socket.on("get_game_state", ({ roomId }) => {
+        const room = rooms.get(roomId);
+        if (!room || !room.gameStarted) return;
+
+        const playerDetail = room.turnOrderDetails?.find(p => p.socketId === socket.id);
+        if (!playerDetail) return;
+
+        // Rimanda tutte le province
+        if (room.provinces) {
+            for (const [provinceId, province] of Object.entries(room.provinces)) {
+                socket.emit("province_updated", {
+                    provinceId,
+                    troops: province.troops,
+                    ownerName: province.owner || null,
+                    noMansLand: province.noMansLand || false
+                });
+            }
+        }
+
+        // Rimanda il turn order (aggiorna pp-continent, pp-name ecc.)
+        socket.emit("turn_order_decided", {
+            turnOrder: room.turnOrderDetails,
+            playerContinents: Object.fromEntries(room.selectedContinents),
+        });
+
+        // Rimanda il turno corrente
+        socket.emit("turn", {
+            currentPlayerId: room.turnOrder[room.currentTurnIndex],
+            turnOrder: room.turnOrderDetails
+        });
+
+        // Se il player è ancora in fase placement
+        if (playerDetail.troops > 0 && room.placementDone && !room.placementDone.has(socket.id)) {
+            socket.emit("placement_start", { troops: playerDetail.troops });
+        }
+
+        // Timer di gioco
+        if (room.gameTimerEnd && !room.gameEnded) {
+            socket.emit("game_timer_start", { endTime: room.gameTimerEnd, serverTime: Date.now() });
+        }
+
+        // Se è stato eliminato
+        if (playerDetail.defeated) {
+            socket.emit("defeated", { roomId });
+        }
     });
 
     socket.on("check_turn_order_status", ({ roomId }) => {

@@ -5,68 +5,135 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dominium - Victory</title>
-    <link rel="stylesheet" href="../css/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Cinzel+Decorative:wght@700&display=swap" rel="stylesheet">
     <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
         body {
+            font-family: 'Cinzel', 'Georgia', serif;
+            background: linear-gradient(135deg, #1a0000 0%, #4a0000 50%, #1a0000 100%);
+            background-attachment: fixed;
             min-height: 100vh;
             display: flex;
-            align-items: center;
+            flex-direction: column;
             justify-content: center;
-            background: #121827;
+            align-items: center;
+            padding: 20px;
+            position: relative;
+            overflow-x: hidden;
         }
 
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-30px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+
+        /* ── VICTORY BOX ── */
         .victory-box {
-            width: min(660px, 100%);
-            padding: 32px;
-            border-radius: 18px;
-            background: rgba(11, 20, 39, 0.96);
-            border: 1px solid rgba(255, 68, 68, 0.18);
-            box-shadow: 0 25px 70px rgba(0, 0, 0, 0.35);
-            color: #e8e8f0;
+            max-width: 660px;
+            width: 100%;
+            background: linear-gradient(145deg, #1a1a1a 0%, #0d0d0d 100%);
+            border: 3px solid #8b0000;
+            border-radius: 15px;
+            padding: 48px 44px 40px;
+            box-shadow:
+                0 20px 60px rgba(0, 0, 0, 0.85),
+                inset 0 1px 0 rgba(255, 68, 68, 0.15),
+                0 0 30px rgba(139, 0, 0, 0.3);
+            color: #ffcccc;
             text-align: center;
+            animation: fadeIn 0.8s ease-in;
+            position: relative;
         }
 
+        /* spada decorativa */
+        .victory-box::before {
+            content: '⚔';
+            position: absolute;
+            top: -16px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 1.4em;
+            color: #8b0000;
+            background: #0d0d0d;
+            padding: 0 12px;
+            line-height: 1;
+        }
+
+        /* ── HEADER ── */
         .victory-box h1 {
-            margin-bottom: 10px;
-            font-size: 3rem;
-            letter-spacing: 0.2em;
-            color: #ff4444;
+            font-family: 'Cinzel', 'Georgia', serif;
+            font-size: 2.8em;
+            letter-spacing: 8px;
             text-transform: uppercase;
-            font-family: 'Cinzel Decorative', Georgia, serif;
+            background: linear-gradient(180deg, #ff4444 0%, #8b0000 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            filter: drop-shadow(0 2px 4px rgba(0,0,0,0.8));
+            margin-bottom: 6px;
         }
 
-        .victory-subtitle {
-            margin-bottom: 24px;
-            color: #f5f5f5;
-            font-size: 1.05rem;
-            opacity: 0.85;
-            line-height: 1.6;
+        .victory-divider {
+            height: 1px;
+            background: rgba(139, 0, 0, 0.4);
+            margin: 18px 0;
         }
 
+        /* ── RESULT BADGE ── */
         .result-badge {
             display: inline-flex;
             align-items: center;
             justify-content: center;
             gap: 10px;
-            margin: 0 auto 26px;
-            padding: 16px 22px;
-            border-radius: 999px;
-            background: rgba(255, 68, 68, 0.12);
-            color: #ffbbbb;
+            margin: 0 auto 10px;
+            padding: 10px 28px;
+            border-radius: 8px;
+            background: rgba(139, 0, 0, 0.2);
+            border: 1px solid #8b0000;
+            color: #ff6666;
+            font-family: 'Cinzel', 'Georgia', serif;
+            font-size: 1.1em;
             font-weight: 700;
             text-transform: uppercase;
-            letter-spacing: 1px;
+            letter-spacing: 3px;
+            text-shadow: 0 0 10px rgba(255, 0, 0, 0.4);
         }
 
         .result-badge.win {
-            background: rgba(34, 197, 94, 0.16);
-            color: #a7f3d0;
+            background: rgba(34, 197, 94, 0.12);
+            border-color: #22c55e;
+            color: #4ade80;
+            text-shadow: 0 0 10px rgba(34, 197, 94, 0.4);
+            animation: pulse-green 1.5s ease-in-out infinite;
         }
 
+        @keyframes pulse-green {
+            0%, 100% { box-shadow: 0 0 10px rgba(34,197,94,0.15); }
+            50%       { box-shadow: 0 0 25px rgba(34,197,94,0.45); }
+        }
+
+        /* ── SUBTITLE ── */
+        .victory-subtitle {
+            color: rgba(255, 204, 204, 0.55);
+            font-size: 0.72em;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            line-height: 1.7;
+            margin-bottom: 24px;
+        }
+
+        /* ── RANKING LIST ── */
         .ranking-list {
             display: grid;
-            gap: 12px;
-            margin-bottom: 28px;
+            gap: 10px;
+            margin-bottom: 30px;
             text-align: left;
         }
 
@@ -74,60 +141,98 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            gap: 18px;
-            padding: 16px 20px;
-            border-radius: 14px;
-            background: rgba(255, 255, 255, 0.04);
-            border: 1px solid rgba(255, 255, 255, 0.06);
+            gap: 14px;
+            padding: 14px 18px;
+            border: 1px solid rgba(139, 0, 0, 0.45);
+            border-radius: 8px;
+            background: rgba(139, 0, 0, 0.07);
+            transition: border-color 0.3s, background 0.3s;
+            animation: rowFadeIn 0.4s ease-out both;
+        }
+
+        .ranking-item:nth-child(1) { animation-delay: 0.1s; }
+        .ranking-item:nth-child(2) { animation-delay: 0.2s; }
+        .ranking-item:nth-child(3) { animation-delay: 0.3s; }
+        .ranking-item:nth-child(4) { animation-delay: 0.4s; }
+
+        @keyframes rowFadeIn {
+            from { opacity: 0; transform: translateX(-16px); }
+            to   { opacity: 1; transform: translateX(0); }
         }
 
         .ranking-item.top {
             border-color: #22c55e;
-            background: rgba(34, 197, 94, 0.1);
+            background: rgba(34, 197, 94, 0.07);
         }
 
         .ranking-item.defeated {
-            opacity: 0.6;
-            border-color: rgba(220, 38, 38, 0.2);
+            opacity: 0.5;
+            border-color: rgba(139, 0, 0, 0.25);
         }
 
         .ranking-name {
-            font-size: 1rem;
-            font-weight: 700;
-            color: #fff;
+            font-size: 0.85em;
+            letter-spacing: 1px;
+            color: #ffcccc;
+            font-weight: 600;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .ranking-item.top .ranking-name {
+            color: #ffffff;
+        }
+
+        .ranking-meta {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-shrink: 0;
         }
 
         .ranking-score {
-            font-size: 0.95rem;
-            color: #cbd5e1;
-            min-width: 108px;
-            text-align: right;
+            font-size: 0.72em;
+            letter-spacing: 1px;
+            color: rgba(255, 204, 204, 0.5);
+            text-transform: uppercase;
         }
 
+        /* ── STATUS BADGES ── */
         .ranking-result {
-            font-size: 0.82rem;
+            font-size: 0.65em;
             font-weight: 700;
             text-transform: uppercase;
-            letter-spacing: 0.08em;
-            padding: 6px 12px;
-            border-radius: 999px;
+            letter-spacing: 1.5px;
+            padding: 4px 10px;
+            border-radius: 4px;
         }
 
         .ranking-result.win {
-            color: #16a34a;
-            background: rgba(22, 163, 74, 0.12);
+            color: #4ade80;
+            background: rgba(34, 197, 94, 0.15);
+            border: 1px solid #22c55e;
         }
 
         .ranking-result.lose {
-            color: #db2777;
-            background: rgba(220, 38, 38, 0.12);
+            color: #ff6666;
+            background: rgba(139, 0, 0, 0.2);
+            border: 1px solid #8b0000;
         }
 
         .ranking-result.eliminated {
-            color: #94a3b8;
-            background: rgba(100, 116, 139, 0.15);
+            color: rgba(255, 204, 204, 0.35);
+            background: rgba(80, 80, 80, 0.15);
+            border: 1px solid rgba(120, 120, 120, 0.25);
         }
 
+        .ranking-result.place {
+            color: rgba(255, 204, 204, 0.45);
+            background: transparent;
+            border: 1px solid rgba(139, 0, 0, 0.3);
+        }
+
+        /* ── ACTIONS ── */
         #victory-actions {
             display: flex;
             justify-content: center;
@@ -135,17 +240,57 @@
             flex-wrap: wrap;
         }
 
-        .btn-small {
-            min-width: 170px;
-            padding: 14px 20px;
-            border-radius: 10px;
-            border: 2px solid #ff4444;
-            background: linear-gradient(135deg, #8b0000 0%, #ff0000 45%, #8b0000 100%);
-            color: #fff;
-            text-transform: uppercase;
-            font-weight: 700;
-            letter-spacing: 1px;
+        .btn {
+            flex: 1;
+            padding: 16px 32px;
+            border: 2px solid #8b0000;
+            border-radius: 8px;
+            font-size: 0.9em;
+            font-weight: bold;
             cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            font-family: 'Cinzel', 'Georgia', serif;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .btn::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            border-radius: 50%;
+            background: rgba(255, 0, 0, 0.2);
+            transform: translate(-50%, -50%);
+            transition: width 0.6s, height 0.6s;
+        }
+
+        .btn:hover::before {
+            width: 300px;
+            height: 300px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #8b0000 0%, #ff0000 50%, #8b0000 100%);
+            color: #ffffff;
+            box-shadow: 0 4px 15px rgba(139, 0, 0, 0.6), inset 0 1px 0 rgba(255,255,255,0.1);
+            min-width: 180px;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 25px rgba(255, 0, 0, 0.8), inset 0 1px 0 rgba(255,255,255,0.2);
+            border-color: #ff0000;
+        }
+
+        @media (max-width: 600px) {
+            .victory-box { padding: 36px 20px 28px; }
+            .victory-box h1 { font-size: 2em; letter-spacing: 4px; }
+            .result-badge { font-size: 0.9em; }
         }
     </style>
 </head>
@@ -153,18 +298,23 @@
 <body>
     <div class="victory-box">
         <h1>Final Ranking</h1>
+
+        <div class="victory-divider"></div>
+
         <div class="result-badge" id="result-badge">Wait...</div>
         <p class="victory-subtitle" id="result-reason">Loading game results...</p>
 
         <div class="ranking-list" id="ranking-list">
             <div class="ranking-item">
                 <div class="ranking-name">Loading...</div>
-                <div class="ranking-score">—</div>
+                <div class="ranking-meta">
+                    <div class="ranking-score">—</div>
+                </div>
             </div>
         </div>
 
         <div id="victory-actions">
-            <button class="btn-small" id="btn-home">Back to Lobby</button>
+            <button class="btn btn-primary" id="btn-home">Back to Lobby</button>
         </div>
     </div>
 
@@ -202,19 +352,13 @@
 
             const reason = data.results.reason;
             const currentName = sessionStorage.getItem('playerName');
-
-            // Determine if current player won
-            // players[0] is always the top-ranked
             const isWinner = currentName && players[0]?.name === currentName;
 
             if (reason === 'conquest') {
                 resultBadge.textContent = isWinner ? 'Vittoria!' : 'Sconfitta';
                 if (isWinner) resultBadge.classList.add('win');
-                resultReason.textContent = reason === 'conquest'
-                    ? `${players[0].name} ha conquistato tutte le regioni!`
-                    : '';
+                resultReason.textContent = `${players[0].name} ha conquistato tutte le regioni!`;
             } else {
-                // time
                 resultBadge.textContent = 'Fine Tempo';
                 resultReason.textContent = 'La partita è terminata allo scadere del tempo.';
             }
@@ -234,21 +378,15 @@
                 label.textContent = `${medals[index] || (index + 1) + '.'} ${player.name}${isMe ? ' (tu)' : ''}`;
 
                 const meta = document.createElement('div');
-                meta.style.display = 'flex';
-                meta.style.alignItems = 'center';
-                meta.style.gap = '12px';
+                meta.className = 'ranking-meta';
 
                 const score = document.createElement('div');
                 score.className = 'ranking-score';
-
-                if (isEliminated) {
-                    score.textContent = 'Eliminato';
-                } else {
-                    score.textContent = `${player.provinces} region${player.provinces !== 1 ? 'i' : 'e'}`;
-                }
+                score.textContent = isEliminated
+                    ? 'Eliminato'
+                    : `${player.provinces} region${player.provinces !== 1 ? 'i' : 'e'}`;
 
                 const status = document.createElement('div');
-
                 if (isEliminated) {
                     status.className = 'ranking-result eliminated';
                     status.textContent = 'Eliminato';
@@ -256,10 +394,7 @@
                     status.className = 'ranking-result win';
                     status.textContent = 'Vittoria';
                 } else if (reason === 'time') {
-                    // For time-based: show position only, no win/lose label
-                    status.className = 'ranking-result';
-                    status.style.color = '#94a3b8';
-                    status.style.background = 'rgba(100,116,139,0.1)';
+                    status.className = 'ranking-result place';
                     status.textContent = `${index + 1}° posto`;
                 } else {
                     status.className = 'ranking-result lose';
