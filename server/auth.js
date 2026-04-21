@@ -7,18 +7,18 @@ router.post("/register", async (req, res) => {
     const { email, password } = req.body;
 
     if (!email || !password) {
-        return res.json({ success: false, message: "Inserisci email e password" });
+        return res.json({ success: false, message: "Enter email and password" });
     }
 
     try {
         const [rows] = await db.execute("SELECT idU FROM Utente WHERE email = ?", [email]);
         if (rows.length > 0) {
-            return res.json({ success: false, message: "Email già registrata" });
+            return res.json({ success: false, message: "Email already registered" });
         }
 
         const hash = await bcrypt.hash(password, 10);
         const [result] = await db.execute(
-            "INSERT INTO Utente (email, password) VALUES (?, ?)",
+            "INSERT INTO Utente (email, password, username) VALUES (?, ?, '')",
             [email, hash]
         );
 
@@ -30,7 +30,7 @@ router.post("/register", async (req, res) => {
 
     } catch (err) {
         console.error("[REGISTER]", err);
-        res.json({ success: false, message: "Errore del server: " + err.message });
+        res.json({ success: false, message: "Server error: " + err.message });
     }
 });
 
@@ -38,21 +38,21 @@ router.post("/login", async (req, res) => {
     const { email, password } = req.body;
 
     if (!email || !password) {
-        return res.json({ success: false, message: "Inserisci email e password" });
+        return res.json({ success: false, message: "Enter email and password" });
     }
 
     try {
         const [rows] = await db.execute("SELECT * FROM Utente WHERE email = ?", [email]);
 
         if (rows.length === 0) {
-            return res.json({ success: false, message: "Utente non trovato" });
+            return res.json({ success: false, message: "User not found" });
         }
 
         const user = rows[0];
         const match = await bcrypt.compare(password, user.password);
 
         if (!match) {
-            return res.json({ success: false, message: "Password errata" });
+            return res.json({ success: false, message: "Incorrect password" });
         }
 
         req.session.idU = user.idU;
@@ -62,7 +62,7 @@ router.post("/login", async (req, res) => {
         });
 
     } catch (err) {
-        console.error("[REGISTER] ERRORE COMPLETO:", err);
+        console.error("[LOGIN] COMPLETE ERROR:", err);
         res.json({ success: false, message: err.code + " – " + err.message });
     }
 });

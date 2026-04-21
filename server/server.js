@@ -1255,10 +1255,13 @@ function removeDefeatedPlayers(room, roomId, io) {
 }
 
 function checkVictoryCondition(room, roomId) {
+
     if (!room || room.gameEnded) return false;
     const provinceCount = getProvinceCountByOwner(room);
     const activePlayers = room.turnOrderDetails.filter(p => !p.defeated);
+
     for (const player of activePlayers) {
+        
         if ((provinceCount[player.name] || 0) === Object.keys(provinces).length) {
             concludeGame(roomId, "conquest");
             return true;
