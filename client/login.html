@@ -316,6 +316,17 @@
             document.getElementById(id).classList.remove("visible");
         }
 
+        function getApiUrl(path) {
+            if (window.location.protocol === "file:") {
+                return "http://localhost:3000" + path;
+            }
+            return window.location.origin + path;
+        }
+
+        function showConnectionError(id) {
+            showError(id, "Errore di connessione al server. Apri la pagina via http://localhost:3000/");
+        }
+
         async function doLogin() {
             hideError("error-login");
             const email = document.getElementById("login-email").value.trim();
@@ -327,7 +338,7 @@
             }
 
             try {
-                const res = await fetch("/auth/login", {
+                const res = await fetch(getApiUrl("/auth/login"), {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ email, password })
@@ -341,7 +352,7 @@
 
                 window.location.href = "/view/action.html";
             } catch (err) {
-                showError("error-login", "Errore di connessione al server");
+                showConnectionError("error-login");
             }
         }
 
@@ -367,7 +378,7 @@
             }
 
             try {
-                const res = await fetch("/auth/register", {
+                const res = await fetch(getApiUrl("/auth/register"), {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ email, password })
@@ -381,8 +392,17 @@
 
                 window.location.href = "/view/action.html";
             } catch (err) {
-                showError("error-register", "Errore di connessione al server");
+                showConnectionError("error-register");
             }
+        }
+
+        if (window.location.protocol === "file:") {
+            document.addEventListener("DOMContentLoaded", () => {
+                const warning = document.createElement("div");
+                warning.className = "alert-error visible";
+                warning.textContent = "Apri la pagina tramite http://localhost:3000/ per usare correttamente la registrazione e il login.";
+                document.querySelector(".login-wrapper").prepend(warning);
+            });
         }
 
         // Invio con tasto Enter

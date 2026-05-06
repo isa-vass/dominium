@@ -19,6 +19,8 @@ const io = new Server(httpServer, {});
 global._io = io;
 const rooms = new Map();
 const deleteTimers = new Map();
+const DEFAULT_PORT = 3000;
+const START_PORT = Number(process.env.PORT) || DEFAULT_PORT;
 
 const sessionMiddleware = session({
     secret: "dominium-secret",
@@ -1286,9 +1288,28 @@ function checkVictoryCondition(room, roomId) {
     return false;
 }
 
-httpServer.listen(3000, () => {
-    console.log("Server listening on http://localhost:3000");
-});
+function startServer(port, attempt = 0) {
+    const server = httpServer.listen(port, () => {
+        console.log(`Server listening on http://localhost:${port}`);
+    });
+
+    server.on("error", (err) => {
+        if (err.code === "EADDRINUSE") {
+            if (attempt >= 10) {
+                console.error(`Port ${port} already in use and no alternative port found.`);
+                process.exit(1);
+            }
+            const nextPort = port + 1;
+            console.warn(`Port ${port} is busy, trying port ${nextPort}...`);
+            setTimeout(() => startServer(nextPort, attempt + 1), 100);
+            return;
+        }
+        console.error(err);
+        process.exit(1);
+    });
+}
+
+startServer(START_PORT);
 
 function clearDeleteTimer(roomId) {
     const t = deleteTimers.get(roomId);
