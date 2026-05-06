@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dominium – Accedi</title>
+    <title>Dominium – Login</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link
@@ -247,15 +247,15 @@
         <!-- Titolo stile gioco -->
         <div class="login-header">
             <h1>Dominium</h1>
-            <p class="subtitle">Conquista il mondo</p>
+            <p class="subtitle">Conquerr the world</p>
         </div>
 
         <div class="login-card">
 
             <!-- Tab selector -->
             <div class="tabs">
-                <button class="tab active" onclick="switchTab(event, 'login')">Accedi</button>
-                <button class="tab" onclick="switchTab(event, 'register')">Registrati</button>
+                <button class="tab active" onclick="switchTab(event, 'login')">Login</button>
+                <button class="tab" onclick="switchTab(event, 'register')">Register</button>
             </div>
 
             <div class="card-divider"></div>
@@ -265,14 +265,14 @@
                 <div class="alert-error" id="error-login"></div>
                 <div class="form-group">
                     <label for="login-email">Email</label>
-                    <input type="email" id="login-email" placeholder="Inserisci la tua email" autocomplete="email">
+                    <input type="email" id="login-email" placeholder="Enter your email" autocomplete="email">
                 </div>
                 <div class="form-group">
                     <label for="login-password">Password</label>
-                    <input type="password" id="login-password" placeholder="Inserisci la tua password"
+                    <input type="password" id="login-password" placeholder="Enter your password"
                         autocomplete="current-password">
                 </div>
-                <button class="submit-btn" onclick="doLogin()">Accedi</button>
+                <button class="submit-btn" onclick="doLogin()">Login</button>
             </div>
 
             <!-- REGISTRAZIONE -->
@@ -280,19 +280,19 @@
                 <div class="alert-error" id="error-register"></div>
                 <div class="form-group">
                     <label for="reg-email">Email</label>
-                    <input type="email" id="reg-email" placeholder="Inserisci la tua email" autocomplete="email">
+                    <input type="email" id="reg-email" placeholder="Enter your email" autocomplete="email">
                 </div>
                 <div class="form-group">
                     <label for="reg-password">Password</label>
-                    <input type="password" id="reg-password" placeholder="Scegli una password (min. 6 caratteri)"
+                    <input type="password" id="reg-password" placeholder="Choose a password (min. 6 characters)"
                         autocomplete="new-password">
                 </div>
                 <div class="form-group">
-                    <label for="reg-password2">Conferma password</label>
-                    <input type="password" id="reg-password2" placeholder="Ripeti la password"
+                    <label for="reg-password2">Confirm Password</label>
+                    <input type="password" id="reg-password2" placeholder="Repeat the password"
                         autocomplete="new-password">
                 </div>
-                <button class="submit-btn" onclick="doRegister()">Registrati</button>
+                <button class="submit-btn" onclick="doRegister()">Register</button>
             </div>
 
         </div>

@@ -47,7 +47,6 @@ players.set(socket.id, {
 });
 
 let provinces = {};
-
 // Map: provinceId -> ownerName (live, updated during game)
 let provinceOwners = {};
 // Map: ownerName -> continentName
@@ -88,18 +87,35 @@ if (gameAlreadyStarted) {
     console.log("[game_logic] Game already started, skipping dice modal.");
     gameHasStarted = true;
     hideModal();
+
+    const savedName = sessionStorage.getItem("playerName");
+    const savedContinent = sessionStorage.getItem("playerContinent");
+    const savedTroops = sessionStorage.getItem("playerTroops");
+    if (savedName) document.getElementById("pp-name").textContent = savedName;
+    if (savedContinent) {
+        document.getElementById("pp-continent").textContent = savedContinent;
+        applyPlayerColor(savedContinent);
+    }
+    if (savedTroops) document.getElementById("pp-troops").textContent = savedTroops;
 }
 
 const roomIdFromUrl = new URLSearchParams(window.location.search).get("id");
 const roomId = roomIdFromUrl || sessionStorage.getItem("roomId");
 
+function requestGameState() {
+    const rId = getRoomId();
+    if (!rId) return;
+    socket.emit("rejoin_room", { roomId: rId });
+    socket.emit("get_game_state", { roomId: rId });
+}
+
 if (roomId && socket.connected) {
     checkGameState();
-    socket.emit("rejoin_room", { roomId });
+    requestGameState();
 } else if (roomId) {
     socket.on("connect", () => {
         checkGameState();
-        socket.emit("rejoin_room", { roomId });
+        requestGameState();
     });
 }
 
