@@ -79,4 +79,80 @@ router.post("/logout", (req, res) => {
     res.json({ success: true });
 });
 
+// In fondo ad auth.js, prima di module.exports
+
+router.post("/username", async (req, res) => {
+    if (!req.session || !req.session.idU) {
+        return res.json({ success: false, message: "Not logged in" });
+    }
+
+    const { username } = req.body;
+    if (!username || typeof username !== "string") {
+        return res.json({ success: false, message: "Invalid username" });
+    }
+
+    const trimmed = username.trim().substring(0, 20);
+
+    try {
+        await db.execute(
+            "UPDATE Utente SET username = ? WHERE idU = ?",
+            [trimmed, req.session.idU]
+        );
+        res.json({ success: true });
+    } catch (err) {
+        console.error("[USERNAME]", err);
+        res.json({ success: false, message: err.message });
+    }
+});
+
+// Funzioni interne chiamate dal server (non route HTTP)
+async function saveGameToDB(room, roomId, reason, gameStartTime) {
+    try {
+        const durata = Math.round((Date.now() - gameStartTime) / 1000);
+
+        const [result] = await db.execute(
+            "INSERT INTO Partita (durata, tipoFine) VALUES (?, ?)",
+            [durata, reason]
+        );
+        const idP = result.insertId;
+
+        await saveStatisticheToDB(room, idP, reason);
+        return idP;
+    } catch (err) {
+        console.error("[SAVE_GAME]", err);
+    }
+}
+
+async function saveStatisticheToDB(room, idP, reason) {
+    try {
+        const results = room.gameResults;
+        if (!results || !Array.isArray(results.players)) return;
+
+        for (let i = 0; i < results.players.length; i++) {
+            const player = results.players[i];
+
+            // Recupera idU dal socket della sessione
+            const playerDetail = room.turnOrderDetails.find(p => p.name === player.name);
+            if (!playerDetail) continue;
+
+            const playerSocket = global._io?.sockets?.sockets?.get(playerDetail.socketId);
+            const idU = playerSocket?.request?.session?.idU;
+            if (!idU) continue;
+
+            const posizione = i + 1;
+            const vittoria = (i === 0 && (reason === "conquest" || reason === "time")) ? 1 : 0;
+            const province = player.provinces || 0;
+            const truppe = player.troops || 0;
+
+            await db.execute(
+                "INSERT INTO Statistiche (idU, idP, posizione, vittoria, province, truppe) VALUES (?, ?, ?, ?, ?, ?)",
+                [idU, idP, posizione, vittoria, province, truppe]
+            );
+        }
+    } catch (err) {
+        console.error("[SAVE_STATISTICHE]", err);
+    }
+}
+
 module.exports = router;
+module.exports.saveGameToDB = saveGameToDB;

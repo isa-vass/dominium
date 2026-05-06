@@ -10,9 +10,13 @@ const cookieParser = require("cookie-parser");
 const provinces = require("./provinces");
 const borders = require("./borders");
 const authRouter = require("./auth");
+const db = require("./db");
+const { saveGameToDB } = require("./auth");
+
 const app = express();
 const httpServer = createServer(app);
 const io = new Server(httpServer, {});
+global._io = io;
 const rooms = new Map();
 const deleteTimers = new Map();
 
@@ -143,6 +147,14 @@ io.on("connection", (socket) => {
             if (roomId) emitPlayersUpdated(roomId);
         });
         socket.emit("name_ok");
+
+        // Aggiorna username nel DB
+        if (socket.request.session.idU) {
+            db.execute(
+                "UPDATE Utente SET username = ? WHERE idU = ?",
+                [trimmedName, socket.request.session.idU]
+            ).catch(err => console.error("[SET_NAME DB]", err));
+        }
     });
 
     socket.on("get_rooms", () => {
@@ -290,6 +302,7 @@ io.on("connection", (socket) => {
                 io.to(roomId).emit("game_start");
                 room.isRollingForTroops = true;
                 room.gameStarted = true;
+                room.gameStartTime = Date.now();
                 room.gameCountdown = null;
                 const gameDuration = 15 * 60;
                 room.gameTimerEnd = Date.now() + gameDuration * 1000;
@@ -1194,13 +1207,16 @@ function clearEndGameTimer(room) {
     }
 }
 
-function concludeGame(roomId, reason = "time") {
+async function concludeGame(roomId, reason = "time") {
     const room = rooms.get(roomId);
     if (!room || room.gameEnded) return;
     clearEndGameTimer(room);
     room.gameEnded = true;
     room.gameResults = { ...buildGameResults(room), reason };
     io.to(roomId).emit("game_over", { roomId, results: room.gameResults });
+
+    // Salva partita e statistiche nel DB
+    await saveGameToDB(room, roomId, reason, room.gameStartTime || Date.now());
 }
 
 function removeDefeatedPlayers(room, roomId, io) {
@@ -1261,7 +1277,7 @@ function checkVictoryCondition(room, roomId) {
     const activePlayers = room.turnOrderDetails.filter(p => !p.defeated);
 
     for (const player of activePlayers) {
-        
+
         if ((provinceCount[player.name] || 0) === Object.keys(provinces).length) {
             concludeGame(roomId, "conquest");
             return true;
