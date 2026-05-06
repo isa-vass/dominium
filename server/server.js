@@ -493,7 +493,7 @@ io.on("connection", (socket) => {
         }
         const neighbors = borders[fromProvinceId] || [];
         if (!neighbors.includes(toProvinceId)) {
-            socket.emit("error", { message: "Province non confinanti" });
+            socket.emit("error", { message: "Provinces are not bordering" });
             return;
         }
         const defenderPlayer = room.turnOrderDetails.find(p => p.name === defender.owner);

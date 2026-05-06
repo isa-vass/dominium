@@ -208,15 +208,15 @@
             const isWinner = currentName && players[0]?.name === currentName;
 
             if (reason === 'conquest') {
-                resultBadge.textContent = isWinner ? 'Vittoria!' : 'Sconfitta';
+                resultBadge.textContent = isWinner ? 'Victory!' : 'Defeat';
                 if (isWinner) resultBadge.classList.add('win');
                 resultReason.textContent = reason === 'conquest'
-                    ? `${players[0].name} ha conquistato tutte le regioni!`
+                    ? `${players[0].name} has conquered all regions!`
                     : '';
             } else {
                 // time
-                resultBadge.textContent = 'Fine Tempo';
-                resultReason.textContent = 'La partita è terminata allo scadere del tempo.';
+                resultBadge.textContent = 'Game Over';
+                resultReason.textContent = 'The game has ended due to time expiration.';
             }
 
             rankingList.innerHTML = '';
@@ -242,19 +242,19 @@
                 score.className = 'ranking-score';
 
                 if (isEliminated) {
-                    score.textContent = 'Eliminato';
+                    score.textContent = 'Eliminated';
                 } else {
-                    score.textContent = `${player.provinces} region${player.provinces !== 1 ? 'i' : 'e'}`;
+                    score.textContent = `${player.provinces} region${player.provinces !== 1 ? 's' : 'e'}`;
                 }
 
                 const status = document.createElement('div');
 
                 if (isEliminated) {
                     status.className = 'ranking-result eliminated';
-                    status.textContent = 'Eliminato';
+                    status.textContent = 'Eliminated';
                 } else if (reason === 'conquest' && isTop) {
                     status.className = 'ranking-result win';
-                    status.textContent = 'Vittoria';
+                    status.textContent = 'Victory';
                 } else if (reason === 'time') {
                     // For time-based: show position only, no win/lose label
                     status.className = 'ranking-result';
@@ -263,7 +263,7 @@
                     status.textContent = `${index + 1}° posto`;
                 } else {
                     status.className = 'ranking-result lose';
-                    status.textContent = 'Sconfitta';
+                    status.textContent = 'Defeat';
                 }
 
                 meta.appendChild(score);
@@ -301,7 +301,7 @@
         });
 
         socket.on('connect_error', () => {
-            resultReason.textContent = 'Connessione al server persa. Riprova tra qualche secondo.';
+            resultReason.textContent = 'Connection to server lost. Please try again in a few seconds.';
         });
     </script>
 </body>
