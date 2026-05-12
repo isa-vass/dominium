@@ -299,7 +299,7 @@ io.on("connection", (socket) => {
         }
         emitPlayersUpdated(roomId);
         if (room.players.length === 4 && room.readyPlayers.size === 4) {
-            io.to(roomId).emit("game_countdown_start", { seconds: 3 });
+            io.to(roomId).emit("game_countdown_start", { seconds: 5 });
             room.gameCountdown = setTimeout(() => {
                 io.to(roomId).emit("game_start");
                 room.isRollingForTroops = true;
@@ -630,25 +630,20 @@ io.on("connection", (socket) => {
             attacker.troops = 0;
             attacker.owner = defenderPlayer.name;
 
+            // defender.troops è già aggiornato (le perdite sono state sottratte sopra)
+            // Il difensore può spostare tra 0 e (defender.troops - 1) truppe
+            // nella nuova provincia, tenendone almeno 1 nella sua.
             const defenderTroopsAvailable = defender.troops;
+            const defenderMaxMovable = Math.max(0, defenderTroopsAvailable - 1);
+            const defenderAutoMoved = defenderMaxMovable === 0;
 
-            let defenderAutoMoved = false;
-            let defenderMinMovable = 0;
-            let defenderMaxMovable = 0;
-
-            if (defenderTroopsAvailable <= 1) {
-                defender.troops = 1;
-                attacker.troops = 1;
-                defenderAutoMoved = true;
-            } else {
-                defender.troops = defenderTroopsAvailable - 1;
-                attacker.troops = 1;
-                defenderMinMovable = 0;
-                defenderMaxMovable = Math.max(0, defender.troops - 1);
-                if (defenderMaxMovable === 0) {
-                    defenderAutoMoved = true;
-                }
+            if (defenderAutoMoved) {
+                defender.troops = defenderTroopsAvailable; // rimane invariato
+                attacker.troops = 1;                        // nuova provincia: 1 truppa
             }
+            // Se !defenderAutoMoved, aspettiamo confirm_defender_troop_move
+
+            const defenderMinMovable = 0;
 
             io.to(roomId).emit("attack_result", {
                 winner: "defender",
@@ -682,22 +677,6 @@ io.on("connection", (socket) => {
             checkVictoryCondition(room, roomId);
             removeDefeatedPlayers(room, roomId, io);
 
-            const troopsTotals = getTroopsTotalByOwner(room);
-            const attackerSocket = io.sockets.sockets.get(battle.attackerSocketId);
-            const defenderSocket = io.sockets.sockets.get(battle.defenderSocketId);
-            if (attackerSocket) {
-                attackerSocket.emit("player_troops_updated", {
-                    playerName: battle.attackerName,
-                    troopsRemaining: troopsTotals[battle.attackerName] || 0
-                });
-            }
-            if (defenderSocket) {
-                defenderSocket.emit("player_troops_updated", {
-                    playerName: battle.defenderName,
-                    troopsRemaining: troopsTotals[battle.defenderName] || 0
-                });
-            }
-
             if (!defenderAutoMoved) {
                 room.pendingDefenderTroopMove = {
                     fromProvinceId: battle.toProvinceId,
@@ -717,8 +696,19 @@ io.on("connection", (socket) => {
 
         if (provinceConquered) {
             defender.owner = attackerPlayer.name;
-            attacker.troops = 1;
-            defender.troops = 1;
+
+            // L'attaccante deve tenere almeno 1 truppa nella provincia di partenza
+            // e almeno 1 nella nuova. Può spostare tra 0 e (attacker.troops - 1).
+            const maxMovable = Math.max(0, attacker.troops - 1);
+            const autoMoved = maxMovable === 0;
+
+            if (autoMoved) {
+                // Non c'è scelta: rimane 1 in partenza, 1 in arrivo
+                attacker.troops = 1;
+                defender.troops = 1;
+            }
+            // Se !autoMoved, le truppe vengono spostate solo dopo confirm_troop_move
+            // Intanto lasciamo i contatori invariati lato server e aspettiamo la conferma.
 
             io.to(roomId).emit("attack_result", {
                 winner: "attacker",
@@ -731,8 +721,8 @@ io.on("connection", (socket) => {
                 attackerLosses,
                 defenderLosses,
                 provinceConquered: true,
-                autoMoved: true,
-                maxMovableTroops: 0,
+                autoMoved,
+                maxMovableTroops: maxMovable,
                 minMovableTroops: 0,
                 defenderConqueredAttackerProvince: false,
             });
@@ -747,6 +737,16 @@ io.on("connection", (socket) => {
                 troops: defender.troops,
                 ownerName: attackerPlayer.name
             });
+
+            if (!autoMoved) {
+                // Salviamo lo stato in attesa della conferma del client
+                room.pendingAttackerTroopMove = {
+                    fromProvinceId: battle.fromProvinceId,
+                    toProvinceId: battle.toProvinceId,
+                    attackerSocketId: battle.attackerSocketId,
+                    maxTroops: maxMovable,
+                };
+            }
 
             checkVictoryCondition(room, roomId);
             removeDefeatedPlayers(room, roomId, io);
@@ -1056,6 +1056,69 @@ io.on("connection", (socket) => {
             delete room.troopRolls;
             room.isRollingForTroops = false;
         }
+    });
+
+    socket.on("confirm_troop_move", ({ roomId, troops }) => {
+        const room = rooms.get(roomId);
+        if (!room || !room.pendingAttackerTroopMove) return;
+        const pending = room.pendingAttackerTroopMove;
+        if (pending.attackerSocketId !== socket.id) return;
+
+        const troopsToMove = Math.max(0, Math.min(Number(troops) || 0, pending.maxTroops));
+        const fromProv = room.provinces[pending.fromProvinceId];
+        const toProv = room.provinces[pending.toProvinceId];
+        if (!fromProv || !toProv) return;
+
+        // fromProv = provincia di partenza (deve restare almeno 1)
+        // toProv   = provincia appena conquistata
+        fromProv.troops = fromProv.troops - troopsToMove;
+        toProv.troops = toProv.troops + troopsToMove;
+
+        io.to(roomId).emit("province_updated", {
+            provinceId: pending.fromProvinceId,
+            troops: fromProv.troops,
+            ownerName: fromProv.owner
+        });
+        io.to(roomId).emit("province_updated", {
+            provinceId: pending.toProvinceId,
+            troops: toProv.troops,
+            ownerName: toProv.owner
+        });
+
+        room.pendingAttackerTroopMove = null;
+    });
+
+    // ── CONFERMA SPOSTAMENTO TRUPPE (difensore che ha conquistato) ──
+    socket.on("confirm_defender_troop_move", ({ roomId, troops }) => {
+        const room = rooms.get(roomId);
+        if (!room || !room.pendingDefenderTroopMove) return;
+        const pending = room.pendingDefenderTroopMove;
+        if (pending.defenderSocketId !== socket.id) return;
+
+        const troopsToMove = Math.max(
+            pending.minTroops,
+            Math.min(Number(troops) || 0, pending.maxTroops)
+        );
+        const fromProv = room.provinces[pending.fromProvinceId]; // provincia del difensore
+        const toProv = room.provinces[pending.toProvinceId];   // nuova provincia conquistata
+
+        if (!fromProv || !toProv) return;
+
+        fromProv.troops = fromProv.troops - troopsToMove;
+        toProv.troops = toProv.troops + troopsToMove;
+
+        io.to(roomId).emit("province_updated", {
+            provinceId: pending.fromProvinceId,
+            troops: fromProv.troops,
+            ownerName: fromProv.owner
+        });
+        io.to(roomId).emit("province_updated", {
+            provinceId: pending.toProvinceId,
+            troops: toProv.troops,
+            ownerName: toProv.owner
+        });
+
+        room.pendingDefenderTroopMove = null;
     });
 });
 
