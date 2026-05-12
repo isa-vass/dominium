@@ -1199,34 +1199,48 @@ function showPlacementError(message) {
 // ── JAMENDO MUSIC ──
 const JAMENDO_CLIENT_ID = "40f9ee29";
 
-async function loadAndPlayMusic() {
+async function loadMusic() {
     try {
-        const res = await fetch(
-            `https://api.jamendo.com/v3.0/tracks/?client_id=${JAMENDO_CLIENT_ID}&format=json&limit=10&tags=dark+electronic&audioformat=mp32&boost=popularity_total`
-        );
+        const res = await fetch("/jamendo-tracks", { cache: "no-cache" });
         const data = await res.json();
-
-        if (!data.results || data.results.length === 0) return;
+        if (!data.results || data.results.length === 0) {
+            console.warn("[MUSIC] Nessuna traccia trovata");
+            return null;
+        }
 
         const track = data.results[Math.floor(Math.random() * data.results.length)];
-        const audio = new Audio(track.audio);
-        audio.loop = true;
-        audio.volume = 0.3;
-        window._bgMusic = audio;
+        const trackUrl = track.audio || track.audiodownload;
+        console.log("[MUSIC] Traccia:", track.name, trackUrl);
 
-        audio.play().catch(() => {
-            document.addEventListener("click", () => audio.play(), { once: true });
-        });
+        let audioEl = document.getElementById("bg-music-el");
+        if (!audioEl) {
+            audioEl = document.createElement("audio");
+            audioEl.id = "bg-music-el";
+            audioEl.loop = true;
+            audioEl.volume = 0.3;
+            audioEl.preload = "auto";
+            audioEl.crossOrigin = "anonymous";
+            audioEl.style.display = "none";
+            document.body.appendChild(audioEl);
+        }
 
+        if (audioEl.src !== trackUrl) {
+            audioEl.src = trackUrl;
+            audioEl.load();
+        }
+
+        window._bgMusic = audioEl;
+        return audioEl;
     } catch (err) {
         console.error("[MUSIC]", err);
+        return null;
     }
 }
 
 function createMusicButton() {
     const btn = document.createElement("button");
     btn.id = "music-toggle-btn";
-    btn.textContent = "🔊";
+    btn.textContent = "🔇";
     btn.style.cssText = `
         position: fixed;
         bottom: 28px;
@@ -1257,12 +1271,23 @@ function createMusicButton() {
         btn.style.boxShadow = "0 4px 15px rgba(139,0,0,0.6)";
     });
 
-    btn.addEventListener("click", () => {
-        const music = window._bgMusic;
-        if (!music) return;
+    btn.addEventListener("click", async () => {
+        let music = window._bgMusic;
+        if (!music) {
+            music = await loadMusic();
+        }
+        if (!music) {
+            btn.textContent = "❌";
+            return;
+        }
+
         if (music.paused) {
-            music.play();
-            btn.textContent = "🔊";
+            music.play().then(() => {
+                btn.textContent = "🔊";
+            }).catch(err => {
+                console.error("[MUSIC] Play fallito:", err);
+                btn.textContent = "❌";
+            });
         } else {
             music.pause();
             btn.textContent = "🔇";
@@ -1272,5 +1297,6 @@ function createMusicButton() {
     document.body.appendChild(btn);
 }
 
-loadAndPlayMusic();
+// Carica la traccia all'avvio e mostra il controllo a tutti i giocatori.
+loadMusic();
 createMusicButton();

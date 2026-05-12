@@ -41,10 +41,64 @@ app.get("/", (req, res) => {
     res.sendFile(path.join(__dirname, "../client/login.html"));
 });
 
+const JAMENDO_CLIENT_ID = "40f9ee29";
+const JAMENDO_TRACKS_URL = `https://api.jamendo.com/v3.0/tracks/?client_id=${JAMENDO_CLIENT_ID}&format=json&limit=10&tags=dark+electronic&audioformat=mp32&boost=popularity_total`;
+
 app.post("/leave-room", (req, res) => {
     req.session.roomId = null;
     req.session.save();
     res.sendStatus(200);
+});
+
+app.get("/jamendo-tracks", async (req, res) => {
+    try {
+        const response = await fetch(JAMENDO_TRACKS_URL);
+        if (!response.ok) return res.status(502).json({ results: [] });
+
+        const data = await response.json();
+
+        // Sostituisci l'URL audio con una route proxy locale
+        if (data.results) {
+            data.results = data.results.map(track => ({
+                ...track,
+                audio: `/jamendo-audio?url=${encodeURIComponent(track.audio)}`
+            }));
+        }
+
+        res.json(data);
+    } catch (err) {
+        console.error("[JAMENDO]", err);
+        res.status(502).json({ results: [] });
+    }
+});
+
+app.get("/jamendo-audio", async (req, res) => {
+    const url = req.query.url;
+    if (!url) return res.status(400).end();
+
+    try {
+        const response = await fetch(url, {
+            headers: { "User-Agent": "Dominium/1.0" }
+        });
+        if (!response.ok) return res.status(502).end();
+
+        res.setHeader("Content-Type", response.headers.get("content-type") || "audio/mpeg");
+        res.setHeader("Cache-Control", "public, max-age=3600");
+
+        // Streaming diretto
+        const reader = response.body.getReader();
+        const pump = async () => {
+            const { done, value } = await reader.read();
+            if (done) { res.end(); return; }
+            res.write(Buffer.from(value));
+            pump();
+        };
+        pump();
+
+    } catch (err) {
+        console.error("[JAMENDO AUDIO]", err);
+        res.status(502).end();
+    }
 });
 
 const MAX_ROOMS = 3;
