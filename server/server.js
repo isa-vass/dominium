@@ -564,6 +564,13 @@ io.on("connection", (socket) => {
         if (room.turnOrder[room.currentTurnIndex] !== socket.id) return;
         const attackerPlayer = room.turnOrderDetails.find(p => p.socketId === socket.id);
         if (!attackerPlayer) return;
+        if (attackerPlayer.actionsLeft === undefined) attackerPlayer.actionsLeft = 3;
+        if (attackerPlayer.actionsLeft <= 0) {
+            socket.emit("error", { message: "No actions left this turn!" });
+            return;
+        }
+        attackerPlayer.actionsLeft--;
+        socket.emit("actions_remaining", { actionsLeft: attackerPlayer.actionsLeft });
         const attacker = room.provinces[fromProvinceId];
         const defender = room.provinces[toProvinceId];
         if (!attacker || !defender) return;
@@ -1057,6 +1064,8 @@ io.on("connection", (socket) => {
         const room = rooms.get(roomId);
         if (!room) return;
         if (room.turnOrder[room.currentTurnIndex] !== socket.id) return;
+        const currentPlayerDetail = room.turnOrderDetails.find(p => p.socketId === socket.id);
+        if (currentPlayerDetail) currentPlayerDetail.actionsLeft = 3;
         let nextIndex = (room.currentTurnIndex + 1) % room.turnOrder.length;
         let attempts = 0;
         while (attempts < room.turnOrder.length) {
@@ -1227,7 +1236,8 @@ function finalizeTurnOrder(room, roomId, io, allRolls) {
     }
     const turnOrderDetails = resolved.map(p => ({
         ...p,
-        troops: troopAssignment(p.roll, 0)
+        troops: troopAssignment(p.roll, 0),
+        actionsLeft: 3 
     }));
     room.turnOrder = turnOrderDetails.map(p => p.socketId);
     room.turnOrderDetails = turnOrderDetails;

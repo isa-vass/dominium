@@ -355,6 +355,9 @@ socket.on("turn", ({ currentPlayerId, turnOrder }) => {
     currentPlayer = currentPlayerId;
     const isMyTurn = currentPlayerId === socket.id;
 
+    const actionsEl = document.getElementById("pp-actions");
+    if (actionsEl) actionsEl.textContent = isMyTurn ? "3" : "—";
+
     document.querySelectorAll(".player-item").forEach(item => {
         const nameEl = item.querySelector(".player-name");
         if (!nameEl) return;
@@ -1300,3 +1303,8 @@ function createMusicButton() {
 // Carica la traccia all'avvio e mostra il controllo a tutti i giocatori.
 loadMusic();
 createMusicButton();
+
+socket.on("actions_remaining", ({ actionsLeft }) => {
+    const el = document.getElementById("pp-actions");
+    if (el) el.textContent = actionsLeft;
+});
