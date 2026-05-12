@@ -247,12 +247,16 @@ function renderPlayers(players) {
 let countdownInterval = null;
 function startCountdown(seconds, type = "normal") {
     const bar = document.getElementById("countdown-bar");
-    if (!bar) return;
+    if (!bar || typeof seconds !== "number" || seconds <= 0) return;
     const number = document.getElementById("countdown-number");
     const fill = document.getElementById("countdown-fill");
     const text = document.getElementById("countdown-text");
 
+    clearInterval(countdownInterval);
+    countdownInterval = null;
+
     bar.classList.add("visible");
+    bar.style.display = "flex";
 
     if (type === "game") {
         text.textContent = "Game starting in";
@@ -263,11 +267,18 @@ function startCountdown(seconds, type = "normal") {
     let remaining = seconds;
     number.textContent = remaining;
     fill.style.width = "100%";
+
     countdownInterval = setInterval(() => {
         remaining--;
+        if (remaining <= 0) {
+            number.textContent = 0;
+            fill.style.width = "0%";
+            clearInterval(countdownInterval);
+            countdownInterval = null;
+            return;
+        }
         number.textContent = remaining;
         fill.style.width = (remaining / seconds * 100) + "%";
-        if (remaining <= 0) clearInterval(countdownInterval);
     }, 1000);
 }
 
@@ -275,7 +286,9 @@ function stopCountdown() {
     const bar = document.getElementById("countdown-bar");
     if (!bar) return;
     clearInterval(countdownInterval);
+    countdownInterval = null;
     bar.classList.remove("visible");
+    bar.style.display = "none";
 }
 
 let gameTimerInterval = null;
