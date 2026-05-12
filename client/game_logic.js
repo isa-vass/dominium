@@ -1195,3 +1195,82 @@ function showPlacementError(message) {
         el.style.display = "none";
     }, 3000);
 }
+
+// ── JAMENDO MUSIC ──
+const JAMENDO_CLIENT_ID = "40f9ee29";
+
+async function loadAndPlayMusic() {
+    try {
+        const res = await fetch(
+            `https://api.jamendo.com/v3.0/tracks/?client_id=${JAMENDO_CLIENT_ID}&format=json&limit=10&tags=dark+electronic&audioformat=mp32&boost=popularity_total`
+        );
+        const data = await res.json();
+
+        if (!data.results || data.results.length === 0) return;
+
+        const track = data.results[Math.floor(Math.random() * data.results.length)];
+        const audio = new Audio(track.audio);
+        audio.loop = true;
+        audio.volume = 0.3;
+        window._bgMusic = audio;
+
+        audio.play().catch(() => {
+            document.addEventListener("click", () => audio.play(), { once: true });
+        });
+
+    } catch (err) {
+        console.error("[MUSIC]", err);
+    }
+}
+
+function createMusicButton() {
+    const btn = document.createElement("button");
+    btn.id = "music-toggle-btn";
+    btn.textContent = "🔊";
+    btn.style.cssText = `
+        position: fixed;
+        bottom: 28px;
+        left: 28px;
+        z-index: 600;
+        width: 44px;
+        height: 44px;
+        background: linear-gradient(135deg, #8b0000 0%, #ff0000 50%, #8b0000 100%);
+        color: #ffffff;
+        border: 2px solid #ff4444;
+        border-radius: 8px;
+        font-size: 18px;
+        cursor: pointer;
+        font-family: 'Cinzel', Georgia, serif;
+        box-shadow: 0 4px 15px rgba(139,0,0,0.6);
+        transition: transform 0.2s, box-shadow 0.2s;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    `;
+
+    btn.addEventListener("mouseenter", () => {
+        btn.style.transform = "translateY(-2px)";
+        btn.style.boxShadow = "0 6px 25px rgba(255,0,0,0.8)";
+    });
+    btn.addEventListener("mouseleave", () => {
+        btn.style.transform = "translateY(0)";
+        btn.style.boxShadow = "0 4px 15px rgba(139,0,0,0.6)";
+    });
+
+    btn.addEventListener("click", () => {
+        const music = window._bgMusic;
+        if (!music) return;
+        if (music.paused) {
+            music.play();
+            btn.textContent = "🔊";
+        } else {
+            music.pause();
+            btn.textContent = "🔇";
+        }
+    });
+
+    document.body.appendChild(btn);
+}
+
+loadAndPlayMusic();
+createMusicButton();
