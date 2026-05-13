@@ -50,6 +50,40 @@ app.post("/leave-room", (req, res) => {
     res.sendStatus(200);
 });
 
+app.get("/api/statistiche", async (req, res) => {
+    const idU = req.session && req.session.idU;
+    if (!idU) return res.status(401).json({ error: "Non autenticato" });
+
+    try {
+        const [partite] = await db.execute(`
+            SELECT
+                p.data,
+                p.durata,
+                p.tipoFine,
+                s.posizione,
+                s.vittoria,
+                s.province,
+                s.truppe
+            FROM Statistiche s
+            JOIN Partita p ON s.idP = p.idP
+            WHERE s.idU = ?
+            ORDER BY p.data DESC
+        `, [idU]);
+
+        const totali = {
+            partite:  partite.length,
+            vittorie: partite.filter(p => p.vittoria).length,
+            province: partite.reduce((acc, p) => acc + (p.province || 0), 0),
+            truppe:   partite.reduce((acc, p) => acc + (p.truppe   || 0), 0),
+        };
+
+        return res.json({ partite, totali });
+    } catch (err) {
+        console.error("Errore /api/statistiche:", err);
+        return res.status(500).json({ error: "Errore interno del server" });
+    }
+});
+
 app.get("/jamendo-tracks", async (req, res) => {
     try {
         const response = await fetch(JAMENDO_TRACKS_URL);

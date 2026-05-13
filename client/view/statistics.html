@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Statistiche – Dominium</title>
+    <link rel="stylesheet" href="../css/style.css">
+    <style>
+        /* ── STATISTICHE PAGE ── */
+
+        .stats-summary {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+            margin-bottom: 36px;
+        }
+
+        .stat-card {
+            background: linear-gradient(145deg, #1a1a1a 0%, #0d0d0d 100%);
+            border: 2px solid #8b0000;
+            border-radius: 10px;
+            padding: 20px 14px 16px;
+            text-align: center;
+            box-shadow:
+                0 8px 24px rgba(0,0,0,0.6),
+                inset 0 1px 0 rgba(255, 68, 68, 0.1);
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+
+        .stat-card:hover {
+            border-color: #ff4444;
+            box-shadow:
+                0 8px 32px rgba(139,0,0,0.5),
+                inset 0 1px 0 rgba(255, 68, 68, 0.2);
+        }
+
+        .stat-card-value {
+            font-family: 'Cinzel Decorative', 'Georgia', serif;
+            font-size: 2em;
+            color: #ff4444;
+            text-shadow: 0 0 12px rgba(255, 0, 0, 0.4);
+            line-height: 1;
+            margin-bottom: 8px;
+        }
+
+        .stat-card-label {
+            font-size: 0.65em;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: rgba(255, 204, 204, 0.5);
+        }
+
+        /* Tabella partite */
+        .stats-table-wrapper {
+            background: linear-gradient(145deg, #1a1a1a 0%, #0d0d0d 100%);
+            border: 2px solid #8b0000;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow:
+                0 16px 48px rgba(0,0,0,0.7),
+                inset 0 1px 0 rgba(255, 68, 68, 0.1);
+        }
+
+        .stats-table-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 20px 24px 18px;
+            border-bottom: 1px solid rgba(139, 0, 0, 0.4);
+        }
+
+        .stats-table-title {
+            font-family: 'Cinzel Decorative', 'Georgia', serif;
+            font-size: 1em;
+            letter-spacing: 3px;
+            color: #ff4444;
+            text-transform: uppercase;
+            text-shadow: 0 0 10px rgba(255, 0, 0, 0.3);
+        }
+
+        .stats-count-badge {
+            font-size: 0.7em;
+            letter-spacing: 1px;
+            color: rgba(255, 204, 204, 0.4);
+            text-transform: uppercase;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        thead tr {
+            background: rgba(139, 0, 0, 0.12);
+        }
+
+        thead th {
+            padding: 12px 20px;
+            text-align: left;
+            font-size: 0.65em;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: rgba(255, 204, 204, 0.45);
+            border-bottom: 1px solid rgba(139, 0, 0, 0.3);
+            font-weight: 600;
+        }
+
+        tbody tr {
+            border-bottom: 1px solid rgba(139, 0, 0, 0.15);
+            transition: background 0.2s;
+        }
+
+        tbody tr:last-child {
+            border-bottom: none;
+        }
+
+        tbody tr:hover {
+            background: rgba(139, 0, 0, 0.1);
+        }
+
+        tbody td {
+            padding: 14px 20px;
+            font-size: 0.82em;
+            color: #ffcccc;
+            letter-spacing: 0.5px;
+        }
+
+        .td-date {
+            color: rgba(255, 204, 204, 0.5);
+            font-size: 0.75em;
+            letter-spacing: 1px;
+        }
+
+        .badge-vittoria {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 4px;
+            font-size: 0.7em;
+            font-weight: 700;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+        }
+
+        .badge-win {
+            background: rgba(34, 197, 94, 0.18);
+            color: #4ade80;
+            border: 1px solid #22c55e;
+        }
+
+        .badge-loss {
+            background: rgba(139, 0, 0, 0.2);
+            color: #ff6666;
+            border: 1px solid #8b0000;
+        }
+
+        .td-pos {
+            font-family: 'Cinzel Decorative', 'Georgia', serif;
+            font-size: 1em;
+            color: #ff4444;
+        }
+
+        .td-num {
+            font-family: 'Cinzel', 'Georgia', serif;
+            font-size: 0.88em;
+            color: #ffcccc;
+        }
+
+        /* Stato caricamento / vuoto */
+        .stats-state {
+            text-align: center;
+            padding: 48px 24px;
+            color: rgba(255, 204, 204, 0.3);
+            font-size: 0.75em;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+
+        .stats-state .state-icon {
+            font-size: 2.5em;
+            display: block;
+            margin-bottom: 14px;
+            opacity: 0.3;
+        }
+
+        /* Loader puntini */
+        .dots-loader::after {
+            content: '';
+            display: inline-block;
+            animation: dots 1.4s steps(4, end) infinite;
+        }
+
+        @keyframes dots {
+            0%   { content: ''; }
+            25%  { content: '.'; }
+            50%  { content: '..'; }
+            75%  { content: '...'; }
+        }
+
+        /* Back button area */
+        .back-row {
+            display: flex;
+            align-items: center;
+            margin-bottom: 28px;
+            gap: 16px;
+        }
+
+        .btn-back {
+            background: transparent;
+            border: 1px solid rgba(139, 0, 0, 0.45);
+            color: rgba(255, 204, 204, 0.6);
+            font-size: 0.75em;
+            padding: 10px 20px;
+            letter-spacing: 1.5px;
+            flex-shrink: 0;
+        }
+
+        .btn-back:hover {
+            border-color: #ff4444;
+            color: #ff4444;
+            background: rgba(139, 0, 0, 0.12);
+            transform: translateY(-1px);
+            box-shadow: none;
+        }
+
+        .page-title {
+            font-family: 'Cinzel Decorative', 'Georgia', serif;
+            font-size: 1.5em;
+            color: #ff4444;
+            letter-spacing: 4px;
+            text-transform: uppercase;
+            text-shadow: 0 0 12px rgba(255, 0, 0, 0.35);
+        }
+
+        @media (max-width: 768px) {
+            .stats-summary {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            thead th, tbody td {
+                padding: 10px 12px;
+            }
+
+            .page-title {
+                font-size: 1.1em;
+                letter-spacing: 2px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container wide">
+
+        <div class="back-row">
+            <button class="btn btn-back" id="btn-back">← INDIETRO</button>
+            <span class="page-title">STATISTICHE</span>
+        </div>
+
+        <!-- Riepilogo numerico -->
+        <div class="stats-summary" id="stats-summary">
+            <div class="stat-card">
+                <div class="stat-card-value" id="val-partite">–</div>
+                <div class="stat-card-label">Partite Giocate</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-card-value" id="val-vittorie">–</div>
+                <div class="stat-card-label">Vittorie</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-card-value" id="val-province">–</div>
+                <div class="stat-card-label">Province Totali</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-card-value" id="val-truppe">–</div>
+                <div class="stat-card-label">Truppe Totali</div>
+            </div>
+        </div>
+
+        <!-- Tabella storico partite -->
+        <div class="stats-table-wrapper">
+            <div class="stats-table-header">
+                <span class="stats-table-title">Storico Partite</span>
+                <span class="stats-count-badge" id="table-count"></span>
+            </div>
+
+            <div id="table-container">
+                <div class="stats-state">
+                    <span class="state-icon">⚔</span>
+                    <span class="dots-loader">Caricamento</span>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        document.getElementById('btn-back').addEventListener('click', () => {
+            window.location.href = 'home.html';
+        });
+
+        async function loadStats() {
+            try {
+                const res = await fetch('/api/statistiche');
+
+                if (!res.ok) {
+                    if (res.status === 401) {
+                        window.location.href = 'login.html';
+                        return;
+                    }
+                    throw new Error('Errore server: ' + res.status);
+                }
+
+                const data = await res.json();
+                renderStats(data);
+
+            } catch (err) {
+                document.getElementById('table-container').innerHTML = `
+                    <div class="stats-state">
+                        <span class="state-icon">✖</span>
+                        Errore nel caricamento dei dati
+                    </div>`;
+                console.error(err);
+            }
+        }
+
+        function formatDate(isoStr) {
+            if (!isoStr) return '–';
+            const d = new Date(isoStr);
+            return d.toLocaleDateString('it-IT', {
+                day: '2-digit', month: '2-digit', year: 'numeric'
+            }) + ' ' + d.toLocaleTimeString('it-IT', {
+                hour: '2-digit', minute: '2-digit'
+            });
+        }
+
+        function formatDurata(sec) {
+            if (sec == null) return '–';
+            const m = Math.floor(sec / 60);
+            const s = sec % 60;
+            return m > 0 ? `${m}m ${s}s` : `${s}s`;
+        }
+
+        function renderStats(data) {
+            // data = { partite: [...], totali: { partite, vittorie, province, truppe } }
+            const t = data.totali || {};
+
+            document.getElementById('val-partite').textContent  = t.partite  ?? 0;
+            document.getElementById('val-vittorie').textContent = t.vittorie ?? 0;
+            document.getElementById('val-province').textContent = t.province ?? 0;
+            document.getElementById('val-truppe').textContent   = t.truppe   ?? 0;
+
+            const partite = data.partite || [];
+            document.getElementById('table-count').textContent =
+                partite.length === 1 ? '1 partita' : `${partite.length} partite`;
+
+            if (partite.length === 0) {
+                document.getElementById('table-container').innerHTML = `
+                    <div class="stats-state">
+                        <span class="state-icon">⚔</span>
+                        Nessuna partita giocata ancora
+                    </div>`;
+                return;
+            }
+
+            const rows = partite.map(p => `
+                <tr>
+                    <td class="td-date">${formatDate(p.data)}</td>
+                    <td class="td-pos">${p.posizione != null ? '#' + p.posizione : '–'}</td>
+                    <td>
+                        <span class="badge-vittoria ${p.vittoria ? 'badge-win' : 'badge-loss'}">
+                            ${p.vittoria ? 'VITTORIA' : 'SCONFITTA'}
+                        </span>
+                    </td>
+                    <td class="td-num">${p.province ?? 0}</td>
+                    <td class="td-num">${p.truppe ?? 0}</td>
+                    <td class="td-date">${formatDurata(p.durata)}</td>
+                    <td class="td-date">${p.tipoFine ?? '–'}</td>
+                </tr>
+            `).join('');
+
+            document.getElementById('table-container').innerHTML = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Data</th>
+                            <th>Posizione</th>
+                            <th>Esito</th>
+                            <th>Province</th>
+                            <th>Truppe</th>
+                            <th>Durata</th>
+                            <th>Tipo Fine</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>`;
+        }
+
+        loadStats();
+    </script>
+    <script src="/client.js"></script>
+</body>
+</html>
