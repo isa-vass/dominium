@@ -21,6 +21,9 @@ const rooms = new Map();
 const deleteTimers = new Map();
 const DEFAULT_PORT = 3000;
 const START_PORT = Number(process.env.PORT) || DEFAULT_PORT;
+const activeSessions = new Map();
+app.locals.activeSessions = activeSessions;
+
 
 const sessionMiddleware = session({
     secret: "dominium-secret",
@@ -32,6 +35,21 @@ const sessionMiddleware = session({
 app.use(cookieParser());
 app.use(express.json());
 app.use(sessionMiddleware);
+app.use((req, res, next) => {
+    const publicPaths = ['/auth/login', '/auth/register', '/auth/session', '/', '/login.html'];
+    if (publicPaths.some(p => req.path.startsWith(p))) return next();
+
+    const email = req.session?.email;
+    if (!email) return next();
+
+    const activeSessions = req.app.locals.activeSessions;
+    if (activeSessions.get(email) !== req.session.id) {
+        req.session.destroy(() => {});
+        return res.status(401).json({ success: false, message: 'Session expired: logged in from another device' });
+    }
+
+    next();
+});
 io.engine.use(sessionMiddleware);
 
 app.use(express.static(path.join(__dirname, "../client")));
@@ -211,6 +229,15 @@ function resolveTies(playersWithRolls, resolved = []) {
 }
 
 io.on("connection", (socket) => {
+    const email = socket.request.session?.email;
+    if (email) {
+        const activeSessionId = activeSessions.get(email);
+        if (activeSessionId && activeSessionId !== socket.request.session.id) {
+            socket.emit("session_expired");
+            socket.disconnect(true);
+            return;
+        }
+    }
     socket.emit("welcome", "Welcome to Dominium!");
     socket.emit("provinces_data", provinces);
 
@@ -505,6 +532,13 @@ io.on("connection", (socket) => {
     });
 
     socket.on("disconnect", () => {
+        const email = socket.request.session?.email;
+        if (email) {
+            const currentSessionId = activeSessions.get(email);
+            if (currentSessionId === socket.request.session.id) {
+                activeSessions.delete(email);
+            }
+        }
         rooms.forEach((room, roomId) => {
             if (!room.players.includes(socket.id)) return;
             const wasCurrentPlayer = room.gameStarted && room.turnOrder && room.turnOrder[room.currentTurnIndex] === socket.id;
