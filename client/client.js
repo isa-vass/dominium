@@ -93,6 +93,11 @@ if (btnCreate) {
     });
 }
 
+socket.on("session_expired", () => {
+    alert("Sessione scaduta: account acceduto da un altro dispositivo.");
+    window.location.href = "/login.html";
+});
+
 socket.on("room_created", ({ roomId, roomCode }) => {
     sessionStorage.setItem("roomId", roomId);
     sessionStorage.setItem("roomCode", roomCode);

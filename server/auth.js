@@ -5,16 +5,13 @@ const db = require("./db");
 
 router.post("/register", async (req, res) => {
     const { email, password } = req.body;
-
-    if (!email || !password) {
+    if (!email || !password)
         return res.json({ success: false, message: "Enter email and password" });
-    }
 
     try {
         const [rows] = await db.execute("SELECT idU FROM Utente WHERE email = ?", [email]);
-        if (rows.length > 0) {
+        if (rows.length > 0)
             return res.json({ success: false, message: "Email already registered" });
-        }
 
         const hash = await bcrypt.hash(password, 10);
         const [result] = await db.execute(
@@ -22,9 +19,28 @@ router.post("/register", async (req, res) => {
             [email, hash]
         );
 
+        // Invalida eventuale sessione precedente
+        const activeSessions = req.app.locals.activeSessions;
+        if (activeSessions.has(user.email)) {
+            const oldSessionId = activeSessions.get(user.email);
+            req.sessionStore.destroy(oldSessionId, () => {});
+
+            // Trova e disconnetti il socket associato alla vecchia sessione
+            const io = global._io;
+            if (io) {
+                io.sockets.sockets.forEach((s) => {
+                    if (s.request.session.id === oldSessionId) {
+                        s.emit("session_expired");
+                        s.disconnect(true);
+                    }
+                });
+            }
+        }
+
         req.session.idU = result.insertId;
         req.session.email = email;
         req.session.save(() => {
+            activeSessions.set(email, req.session.id);
             res.json({ success: true });
         });
 
@@ -36,33 +52,34 @@ router.post("/register", async (req, res) => {
 
 router.post("/login", async (req, res) => {
     const { email, password } = req.body;
-
-    if (!email || !password) {
+    if (!email || !password)
         return res.json({ success: false, message: "Enter email and password" });
-    }
 
     try {
         const [rows] = await db.execute("SELECT * FROM Utente WHERE email = ?", [email]);
-
-        if (rows.length === 0) {
+        if (rows.length === 0)
             return res.json({ success: false, message: "User not found" });
-        }
 
         const user = rows[0];
         const match = await bcrypt.compare(password, user.password);
-
-        if (!match) {
+        if (!match)
             return res.json({ success: false, message: "Incorrect password" });
+
+        // Blocca se già loggato da un'altra sessione attiva
+        const activeSessions = req.app.locals.activeSessions;
+        if (activeSessions.has(user.email)) {
+            return res.json({ success: false, message: "An account is already logged in with this email" });
         }
 
         req.session.idU = user.idU;
         req.session.email = user.email;
         req.session.save(() => {
+            activeSessions.set(user.email, req.session.id);
             res.json({ success: true });
         });
 
     } catch (err) {
-        console.error("[LOGIN] COMPLETE ERROR:", err);
+        console.error("[LOGIN]", err);
         res.json({ success: false, message: err.code + " – " + err.message });
     }
 });
@@ -75,8 +92,12 @@ router.get("/session", (req, res) => {
 });
 
 router.post("/logout", (req, res) => {
-    req.session.destroy();
-    res.json({ success: true });
+    const activeSessions = req.app.locals.activeSessions;
+    const email = req.session?.email;
+    req.session.destroy(() => {
+        if (email) activeSessions.delete(email);
+        res.json({ success: true });
+    });
 });
 
 // In fondo ad auth.js, prima di module.exports
