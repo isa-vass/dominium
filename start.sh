@@ -11,9 +11,10 @@ sudo mysql -e "CREATE USER IF NOT EXISTS 'dominium'@'localhost' IDENTIFIED BY 'd
 sudo mysql -e "GRANT ALL PRIVILEGES ON dominium.* TO 'dominium'@'localhost';"
 sudo mysql -e "FLUSH PRIVILEGES;"
 
-sudo mysql -e "CREATE TABLE IF NOT EXISTS dominium.Utente (
+sudo mysql -e "
+CREATE TABLE IF NOT EXISTS dominium.Utente (
 idU INT AUTO_INCREMENT PRIMARY KEY, 
-email VARCHAR(100) NOT NULL UNIQUE, +-
+email VARCHAR(100) NOT NULL UNIQUE, 
 password VARCHAR(255) NOT NULL, 
 username VARCHAR(255));"
 

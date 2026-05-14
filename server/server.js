@@ -104,12 +104,20 @@ app.get("/api/statistiche", async (req, res) => {
 
 app.get("/jamendo-tracks", async (req, res) => {
     try {
-        const response = await fetch(JAMENDO_TRACKS_URL);
+        let url;
+
+        if (req.query.ids) {
+            // Tracce specifiche per ID
+            url = `https://api.jamendo.com/v3.0/tracks/?client_id=${JAMENDO_CLIENT_ID}&format=json&id=${req.query.ids}&audioformat=mp32`;
+        } else {
+            // Fallback alla ricerca generica che hai già
+            url = JAMENDO_TRACKS_URL;
+        }
+
+        const response = await fetch(url);
         if (!response.ok) return res.status(502).json({ results: [] });
 
         const data = await response.json();
-
-        // Sostituisci l'URL audio con una route proxy locale
         if (data.results) {
             data.results = data.results.map(track => ({
                 ...track,

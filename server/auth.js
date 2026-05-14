@@ -21,9 +21,9 @@ router.post("/register", async (req, res) => {
 
         // Invalida eventuale sessione precedente
         const activeSessions = req.app.locals.activeSessions;
-        if (activeSessions.has(user.email)) {
-            const oldSessionId = activeSessions.get(user.email);
-            req.sessionStore.destroy(oldSessionId, () => {});
+        if (activeSessions.has(email)) {
+            const oldSessionId = activeSessions.get(email);
+            req.sessionStore.destroy(oldSessionId, () => { });
 
             // Trova e disconnetti il socket associato alla vecchia sessione
             const io = global._io;
@@ -100,8 +100,6 @@ router.post("/logout", (req, res) => {
     });
 });
 
-// In fondo ad auth.js, prima di module.exports
-
 router.post("/username", async (req, res) => {
     if (!req.session || !req.session.idU) {
         return res.json({ success: false, message: "Not logged in" });
@@ -126,52 +124,56 @@ router.post("/username", async (req, res) => {
     }
 });
 
-// Funzioni interne chiamate dal server (non route HTTP)
+// transazioni
 async function saveGameToDB(room, roomId, reason, gameStartTime) {
+    const conn = await db.getConnection(); // richiede pool, vedi nota sotto
     try {
+        await conn.beginTransaction();
+
         const durata = Math.round((Date.now() - gameStartTime) / 1000);
 
-        const [result] = await db.execute(
+        const [result] = await conn.execute(
             "INSERT INTO Partita (durata, tipoFine) VALUES (?, ?)",
             [durata, reason]
         );
         const idP = result.insertId;
 
-        await saveStatisticheToDB(room, idP, reason);
+        await saveStatisticheToDB(conn, room, idP, reason);
+
+        await conn.commit();
         return idP;
+
     } catch (err) {
-        console.error("[SAVE_GAME]", err);
+        await conn.rollback();
+        console.error("[SAVE_GAME] Transazione annullata:", err);
+    } finally {
+        conn.release();
     }
 }
 
-async function saveStatisticheToDB(room, idP, reason) {
-    try {
-        const results = room.gameResults;
-        if (!results || !Array.isArray(results.players)) return;
+async function saveStatisticheToDB(conn, room, idP, reason) {
+    const results = room.gameResults;
+    if (!results || !Array.isArray(results.players)) return;
 
-        for (let i = 0; i < results.players.length; i++) {
-            const player = results.players[i];
+    for (let i = 0; i < results.players.length; i++) {
+        const player = results.players[i];
 
-            // Recupera idU dal socket della sessione
-            const playerDetail = room.turnOrderDetails.find(p => p.name === player.name);
-            if (!playerDetail) continue;
+        const playerDetail = room.turnOrderDetails.find(p => p.name === player.name);
+        if (!playerDetail) continue;
 
-            const playerSocket = global._io?.sockets?.sockets?.get(playerDetail.socketId);
-            const idU = playerSocket?.request?.session?.idU;
-            if (!idU) continue;
+        const playerSocket = global._io?.sockets?.sockets?.get(playerDetail.socketId);
+        const idU = playerSocket?.request?.session?.idU;
+        if (!idU) continue;
 
-            const posizione = i + 1;
-            const vittoria = (i === 0 && (reason === "conquest" || reason === "time")) ? 1 : 0;
-            const province = player.provinces || 0;
-            const truppe = player.troops || 0;
+        const posizione = i + 1;
+        const vittoria = (i === 0 && (reason === "conquest" || reason === "time")) ? 1 : 0;
+        const province = player.provinces || 0;
+        const truppe = player.troops || 0;
 
-            await db.execute(
-                "INSERT INTO Statistiche (idU, idP, posizione, vittoria, province, truppe) VALUES (?, ?, ?, ?, ?, ?)",
-                [idU, idP, posizione, vittoria, province, truppe]
-            );
-        }
-    } catch (err) {
-        console.error("[SAVE_STATISTICHE]", err);
+        await conn.execute(
+            "INSERT INTO Statistiche (idU, idP, posizione, vittoria, province, truppe) VALUES (?, ?, ?, ?, ?, ?)",
+            [idU, idP, posizione, vittoria, province, truppe]
+        );
     }
 }
 

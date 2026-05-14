@@ -1200,11 +1200,31 @@ function showPlacementError(message) {
 }
 
 // ── JAMENDO MUSIC ──
-const JAMENDO_CLIENT_ID = "40f9ee29";
+const MY_PLAYLIST = [
+    "2313014",
+    "2307589",
+    "1841610",
+    "2063966",
+    "2298788",
+    "1888584",
+    "1466090",
+    "2318912",
+    "598819",
+    "2272169",
+    "601899",
+    "2272047",
+    "620883",
+    "619458",
+    "2295198",
+    "39265",
+    "516528",
+
+];
 
 async function loadMusic() {
     try {
-        const res = await fetch("/jamendo-tracks", { cache: "no-cache" });
+        const ids = MY_PLAYLIST.join(",");
+        const res = await fetch(`/jamendo-tracks?ids=${ids}`);
         const data = await res.json();
         if (!data.results || data.results.length === 0) {
             console.warn("[MUSIC] Nessuna traccia trovata");
