@@ -44,7 +44,7 @@ app.use((req, res, next) => {
 
     const activeSessions = req.app.locals.activeSessions;
     if (activeSessions.get(email) !== req.session.id) {
-        req.session.destroy(() => {});
+        req.session.destroy(() => { });
         return res.status(401).json({ success: false, message: 'Session expired: logged in from another device' });
     }
 
@@ -89,10 +89,10 @@ app.get("/api/statistiche", async (req, res) => {
         `, [idU]);
 
         const totali = {
-            partite:  partite.length,
+            partite: partite.length,
             vittorie: partite.filter(p => p.vittoria).length,
             province: partite.reduce((acc, p) => acc + (p.province || 0), 0),
-            truppe:   partite.reduce((acc, p) => acc + (p.truppe   || 0), 0),
+            truppe: partite.reduce((acc, p) => acc + (p.truppe || 0), 0),
         };
 
         return res.json({ partite, totali });
@@ -105,11 +105,12 @@ app.get("/api/statistiche", async (req, res) => {
 app.get("/jamendo-tracks", async (req, res) => {
     try {
         let url;
-
         if (req.query.ids) {
-            // Tracce specifiche per ID
-            url = `https://api.jamendo.com/v3.0/tracks/?client_id=${JAMENDO_CLIENT_ID}&format=json&id=${req.query.ids}&audioformat=mp32`;
-        } else {
+            const idList = req.query.ids.split(",");
+            const idParams = idList.map(id => `id[]=${id.trim()}`).join("&");
+            url = `https://api.jamendo.com/v3.0/tracks/?client_id=${JAMENDO_CLIENT_ID}&format=json&audioformat=mp32&${idParams}`;
+        }
+        else {
             // Fallback alla ricerca generica che hai già
             url = JAMENDO_TRACKS_URL;
         }
@@ -1313,7 +1314,7 @@ function finalizeTurnOrder(room, roomId, io, allRolls) {
     const turnOrderDetails = resolved.map(p => ({
         ...p,
         troops: troopAssignment(p.roll, 0),
-        actionsLeft: 3 
+        actionsLeft: 3
     }));
     room.turnOrder = turnOrderDetails.map(p => p.socketId);
     room.turnOrderDetails = turnOrderDetails;

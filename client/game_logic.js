@@ -1218,7 +1218,6 @@ const MY_PLAYLIST = [
     "2295198",
     "39265",
     "516528",
-
 ];
 
 async function loadMusic() {
