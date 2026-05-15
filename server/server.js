@@ -969,11 +969,12 @@ io.on("connection", (socket) => {
             socket.emit("error", { message: "Non puoi piazzare truppe qui" });
             return;
         }
-        if (player.troops <= 0) return;
+        if (player.troopsToPlace <= 0) return;
         if (!room.provinces[provinceId]) room.provinces[provinceId] = { troops: 0, owner: null };
         room.provinces[provinceId].troops++;
         room.provinces[provinceId].owner = player.name;
-        player.troops--;
+        player.troopsToPlace--;
+        player.troops++;
 
         io.to(roomId).emit("province_updated", {
             provinceId,
@@ -987,9 +988,9 @@ io.on("connection", (socket) => {
             removeDefeatedPlayers(room, roomId, io);
         }
 
-        socket.emit("troops_remaining", { troopsToPlaceLeft: player.troops });
+        socket.emit("troops_remaining", { troopsToPlaceLeft: player.troopsToPlace });
 
-        if (player.troops <= 0) {
+        if (player.troopsToPlace <= 0) {
             const isFirstPlacement = room.turnCount === 0;
             if (isFirstPlacement) {
                 const continentProvinces = Object.entries(provinces)
@@ -1008,8 +1009,9 @@ io.on("connection", (socket) => {
                             io.to(roomId).emit("province_updated", { provinceId: id, troops: 0, ownerName: null });
                         }
                     });
-                    player.troops = refund;
-                    socket.emit("troops_remaining", { troopsToPlaceLeft: player.troops });
+                    player.troopsToPlace = refund;
+                    player.troops -= refund;
+                    socket.emit("troops_remaining", { troopsToPlaceLeft: player.troopsToPlace });
                     socket.emit("error", { message: "Devi piazzare almeno una truppa in ogni provincia" });
                     return;
                 }
@@ -1115,8 +1117,8 @@ io.on("connection", (socket) => {
         });
 
         // Se il player è ancora in fase placement
-        if (playerDetail.troops > 0 && room.placementDone && !room.placementDone.has(socket.id)) {
-            socket.emit("placement_start", { troops: playerDetail.troops });
+        if (playerDetail.troopsToPlace > 0 && room.placementDone && !room.placementDone.has(socket.id)) {
+            socket.emit("placement_start", { troops: playerDetail.troopsToPlace });
         }
 
         // Timer di gioco
@@ -1186,12 +1188,12 @@ io.on("connection", (socket) => {
         if (Object.keys(room.troopRolls).length === activePlayers.length) {
             activePlayers.forEach(player => {
                 const r = room.troopRolls[player.socketId];
-                const newTroops = troopAssignment(r, player.troops);
-                if (newTroops !== null) player.troops = newTroops;
+                const bonus = troopAssignment(r, 0);
+                if (bonus !== null) player.troopsToPlace = bonus;
             });
             activePlayers.forEach(player => {
                 const s = io.sockets.sockets.get(player.socketId);
-                if (s) s.emit("placement_start", { troops: player.troops });
+                if (s) s.emit("placement_start", { troops: player.troopsToPlace });
             });
             delete room.troopRolls;
             room.isRollingForTroops = false;
@@ -1313,7 +1315,8 @@ function finalizeTurnOrder(room, roomId, io, allRolls) {
     }
     const turnOrderDetails = resolved.map(p => ({
         ...p,
-        troops: troopAssignment(p.roll, 0),
+        troops: 0,
+        troopsToPlace: troopAssignment(p.roll, 0),
         actionsLeft: 3
     }));
     room.turnOrder = turnOrderDetails.map(p => p.socketId);
@@ -1334,7 +1337,7 @@ function finalizeTurnOrder(room, roomId, io, allRolls) {
     room.provinces = {};
     room.turnOrderDetails.forEach(player => {
         const playerSocket = io.sockets.sockets.get(player.socketId);
-        if (playerSocket) playerSocket.emit("placement_start", { troops: player.troops });
+        if (playerSocket) playerSocket.emit("placement_start", { troops: player.troopsToPlace });
     });
 }
 
