@@ -812,6 +812,8 @@ io.on("connection", (socket) => {
                 ownerName: defender.owner
             });
 
+            emitTroopsUpdate(room, roomId, io);
+
             checkVictoryCondition(room, roomId);
             removeDefeatedPlayers(room, roomId, io);
 
@@ -876,6 +878,8 @@ io.on("connection", (socket) => {
                 ownerName: attackerPlayer.name
             });
 
+            emitTroopsUpdate(room, roomId, io);
+
             if (!autoMoved) {
                 // Salviamo lo stato in attesa della conferma del client
                 room.pendingAttackerTroopMove = {
@@ -916,6 +920,8 @@ io.on("connection", (socket) => {
                 troops: defender.troops,
                 ownerName: defender.owner
             });
+
+            emitTroopsUpdate(room, roomId, io);
         }
 
         room.pendingBattle = null;
@@ -981,6 +987,8 @@ io.on("connection", (socket) => {
             troops: room.provinces[provinceId].troops,
             ownerName: player.name,
         });
+
+        emitTroopsUpdate(room, roomId, io);
 
         checkVictoryCondition(room, roomId);
         const isFirstPlacement = room.turnCount === 0;
@@ -1227,6 +1235,8 @@ io.on("connection", (socket) => {
             ownerName: toProv.owner
         });
 
+        emitTroopsUpdate(room, roomId, io);
+
         room.pendingAttackerTroopMove = null;
     });
 
@@ -1259,6 +1269,8 @@ io.on("connection", (socket) => {
             troops: toProv.troops,
             ownerName: toProv.owner
         });
+
+        emitTroopsUpdate(room, roomId, io);
 
         room.pendingDefenderTroopMove = null;
     });
@@ -1550,4 +1562,23 @@ function troopAssignment(roll, playerTroops) {
             console.warn("Roll non disponibile per assegnazione truppe");
             return null;
     }
+}
+
+function emitTroopsUpdate(room, roomId, io) {
+    if (!room || !room.turnOrderDetails) return;
+    room.turnOrderDetails.forEach(player => {
+        // Ricalcola le truppe reali sommando quelle su mappa
+        const realTroops = Object.values(room.provinces || {})
+            .filter(p => p.owner === player.name && !p.noMansLand)
+            .reduce((sum, p) => sum + (p.troops || 0), 0);
+        player.troops = realTroops;
+
+        const s = io.sockets.sockets.get(player.socketId);
+        if (s) {
+            s.emit("player_troops_updated", {
+                playerName: player.name,
+                troopsRemaining: realTroops
+            });
+        }
+    });
 }
