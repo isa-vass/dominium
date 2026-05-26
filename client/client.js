@@ -135,11 +135,6 @@ socket.on("connect", () => {
     if (roomId) socket.emit("rejoin_room", { roomId });
 });
 
-socket.on("game_start", () => {
-    const roomId = sessionStorage.getItem("roomId");
-    window.location.href = "/view/game_home.html?id=" + roomId;
-});
-
 function selectRoom(roomId) {
     buttonGroup.style.display = "none";
 
@@ -252,39 +247,51 @@ function renderPlayers(players) {
 let countdownInterval = null;
 function startCountdown(seconds, type = "normal") {
     const bar = document.getElementById("countdown-bar");
-    if (!bar || typeof seconds !== "number" || seconds <= 0) return;
+    console.log("1. bar element:", bar);
+    if (!bar) return;
     const number = document.getElementById("countdown-number");
     const fill = document.getElementById("countdown-fill");
     const text = document.getElementById("countdown-text");
+    console.log("2. number:", number, "fill:", fill, "text:", text);
+
+    const total = Number(seconds);
+    console.log("3. total:", total);
+    if (!Number.isFinite(total) || total <= 0) return;
 
     clearInterval(countdownInterval);
     countdownInterval = null;
 
     bar.classList.add("visible");
     bar.style.display = "flex";
+    console.log("4. bar display after set:", bar.style.display, "classes:", bar.className);
 
-    if (type === "game") {
-        text.textContent = "Game starting in";
-    } else {
-        text.textContent = "The game starts in";
+    text.textContent = type === "game" ? "Game starting in" : "The game starts in";
+
+    let remaining = Math.ceil(total);
+
+    function tick() {
+        console.log("TICK remaining:", remaining);
+        number.textContent = remaining;
+        fill.style.width = (remaining / total * 100) + "%";
     }
 
-    let remaining = seconds;
-    number.textContent = remaining;
-    fill.style.width = "100%";
+    tick();
+    console.log("5. first tick done, number.textContent:", number.textContent);
 
     countdownInterval = setInterval(() => {
         remaining--;
+        console.log("INTERVAL remaining:", remaining);
         if (remaining <= 0) {
-            number.textContent = 0;
-            fill.style.width = "0%";
+            remaining = 0;
+            tick();
             clearInterval(countdownInterval);
             countdownInterval = null;
             return;
         }
-        number.textContent = remaining;
-        fill.style.width = (remaining / seconds * 100) + "%";
+        tick();
     }, 1000);
+
+    console.log("6. setInterval set, countdownInterval:", countdownInterval);
 }
 
 function stopCountdown() {
@@ -319,7 +326,7 @@ function startGameTimer(endTime, serverTime) {
         }
         display.textContent = formatTimer(remaining);
     }, 1000);
-    
+
     // Aggiorna immediatamente
     const remaining = Math.max(0, Math.ceil((endTime - Date.now()) / 1000));
     display.textContent = formatTimer(remaining);
@@ -354,9 +361,7 @@ socket.on("players_updated", ({ players }) => {
     if (typeof renderPlayers === "function") renderPlayers(players);
 });
 
-socket.on("game_countdown_start", ({ seconds }) => {
-    if (typeof startCountdown === "function") startCountdown(seconds, "game");
-});
+// Removed duplicate listener: `room.html` already registers its own handler
 
 socket.on("game_timer_start", ({ endTime, serverTime }) => {
     if (typeof startGameTimer === "function") startGameTimer(endTime, serverTime);
@@ -368,4 +373,8 @@ socket.on("countdown_stop", () => {
 
 socket.on("continents_updated", ({ selectedContinents, currentPlayerName }) => {
     if (typeof updateContinents === "function") updateContinents(selectedContinents, currentPlayerName);
+});
+
+socket.on("game_countdown_start", ({ seconds }) => {
+    if (typeof startCountdown === "function") startCountdown(seconds, "game");
 });

@@ -434,7 +434,7 @@ io.on("connection", (socket) => {
                 room.gameTimerEnd = Date.now() + gameDuration * 1000;
                 room.endGameTimeout = setTimeout(() => concludeGame(roomId, "time"), gameDuration * 1000);
                 io.to(roomId).emit("game_timer_start", { endTime: room.gameTimerEnd, serverTime: Date.now() });
-            }, 3000);
+            }, 5000);
         }
     });
 

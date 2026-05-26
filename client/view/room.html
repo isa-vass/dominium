@@ -24,7 +24,8 @@
         </div>
         <div class="button-group vertical">
             <label class="join-label">What's your name, comrade?</label>
-            <input class="join-input" id="name-input" type="text" placeholder="Your name..." maxlength="20" autocomplete="off" />
+            <input class="join-input" id="name-input" type="text" placeholder="Your name..." maxlength="20"
+                autocomplete="off" />
             <div class="name-error" id="name-error">This name is already in use. Choose another.</div>
             <button class="btn btn-ready" id="btn-confirm" style="display:none;">JOIN ⚔</button>
         </div>
@@ -58,12 +59,15 @@
 
                 <div class="selection-card compact">
                     <div class="map-placeholder">
-                        <img src="/map1.svg" alt="Map" style="width:100%; height:100%; object-fit:fit;" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
+                        <img src="/map1.svg" alt="Map" style="width:100%; height:100%; object-fit:fit;"
+                            onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
                         <div style="display:none; flex-direction:column; align-items:center; gap:12px;">
                             <svg viewBox="0 0 100 60" fill="none" xmlns="http://www.w3.org/2000/svg">
                                 <rect x="5" y="5" width="90" height="50" rx="4" stroke="#ff4444" stroke-width="2" />
-                                <path d="M20 15 Q35 10 50 20 Q65 30 80 15" stroke="#ff4444" stroke-width="1.5" fill="none" />
-                                <path d="M10 35 Q30 25 50 35 Q70 45 90 30" stroke="#ff4444" stroke-width="1.5" fill="none" />
+                                <path d="M20 15 Q35 10 50 20 Q65 30 80 15" stroke="#ff4444" stroke-width="1.5"
+                                    fill="none" />
+                                <path d="M10 35 Q30 25 50 35 Q70 45 90 30" stroke="#ff4444" stroke-width="1.5"
+                                    fill="none" />
                                 <circle cx="50" cy="30" r="3" fill="#ff4444" />
                             </svg>
                             <p>Map — Work in Progress</p>
@@ -72,7 +76,7 @@
                 </div>
 
                 <div class="countdown-bar" id="countdown-bar">
-                    <div class="countdown-text">The game starts in</div>
+                    <div class="countdown-text" id="countdown-text">The game starts in</div>
                     <div class="countdown-number" id="countdown-number">5</div>
                     <div class="countdown-track">
                         <div class="countdown-fill" id="countdown-fill"></div>
@@ -120,9 +124,9 @@
             // No rejoin until name is confirmed
         });
 
-        const nameInput   = document.getElementById("name-input");
-        const btnConfirm  = document.getElementById("btn-confirm");
-        const nameError   = document.getElementById("name-error");
+        const nameInput = document.getElementById("name-input");
+        const btnConfirm = document.getElementById("btn-confirm");
+        const nameError = document.getElementById("name-error");
 
         nameInput.addEventListener("input", () => {
             // Show confirm button as soon as there's text; also clear any previous error
